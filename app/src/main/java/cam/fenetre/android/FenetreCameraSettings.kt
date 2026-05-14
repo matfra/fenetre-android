@@ -1,0 +1,324 @@
+package cam.fenetre.android
+
+import android.content.Context
+import kotlin.math.roundToLong
+
+enum class LensMode(val label: String) {
+    ULTRA_WIDE("Ultra wide"),
+    WIDE("Wide"),
+    TELE("Tele"),
+}
+
+enum class ExposureMode(val label: String) {
+    AUTO("Auto"),
+    DAY("Day"),
+    NIGHT("Night"),
+}
+
+class FenetreCameraSettings(context: Context) {
+    private val preferences = context.getSharedPreferences("fenetre_camera", Context.MODE_PRIVATE)
+
+    fun lensMode(): LensMode {
+        val name = preferences.getString(KEY_LENS_MODE, LensMode.ULTRA_WIDE.name)
+        return LensMode.entries.firstOrNull { it.name == name } ?: LensMode.ULTRA_WIDE
+    }
+
+    fun setLensMode(mode: LensMode) {
+        preferences.edit().putString(KEY_LENS_MODE, mode.name).apply()
+    }
+
+    fun rotationDegrees(): Int = preferences.getInt(KEY_ROTATION_DEGREES, DEFAULT_ROTATION_DEGREES)
+
+    fun setRotationDegrees(degrees: Int) {
+        val normalized = when (degrees) {
+            0, 90, 180, 270 -> degrees
+            else -> DEFAULT_ROTATION_DEGREES
+        }
+        preferences.edit().putInt(KEY_ROTATION_DEGREES, normalized).apply()
+    }
+
+    fun exposureMode(): ExposureMode {
+        val name = preferences.getString(KEY_EXPOSURE_MODE, ExposureMode.AUTO.name)
+        return ExposureMode.entries.firstOrNull { it.name == name } ?: ExposureMode.AUTO
+    }
+
+    fun setExposureMode(mode: ExposureMode) {
+        preferences.edit().putString(KEY_EXPOSURE_MODE, mode.name).apply()
+    }
+
+    fun cameraName(): String = cleanPathSegment(
+        preferences.getString(KEY_CAMERA_NAME, DEFAULT_CAMERA_NAME),
+        DEFAULT_CAMERA_NAME,
+    )
+
+    fun setCameraName(value: String) {
+        preferences.edit().putString(KEY_CAMERA_NAME, cleanPathSegment(value, DEFAULT_CAMERA_NAME)).apply()
+    }
+
+    fun deploymentName(): String = cleanText(
+        preferences.getString(KEY_DEPLOYMENT_NAME, DEFAULT_DEPLOYMENT_NAME),
+        DEFAULT_DEPLOYMENT_NAME,
+    )
+
+    fun setDeploymentName(value: String) {
+        preferences.edit().putString(KEY_DEPLOYMENT_NAME, cleanText(value, DEFAULT_DEPLOYMENT_NAME)).apply()
+    }
+
+    fun publicBaseUrl(): String = normalizeUrl(
+        preferences.getString(KEY_PUBLIC_BASE_URL, DEFAULT_PUBLIC_BASE_URL),
+        DEFAULT_PUBLIC_BASE_URL,
+    )
+
+    fun setPublicBaseUrl(value: String) {
+        preferences.edit().putString(KEY_PUBLIC_BASE_URL, normalizeUrl(value, DEFAULT_PUBLIC_BASE_URL)).apply()
+    }
+
+    fun cameraDescription(): String = cleanText(
+        preferences.getString(KEY_CAMERA_DESCRIPTION, DEFAULT_CAMERA_DESCRIPTION),
+        DEFAULT_CAMERA_DESCRIPTION,
+    )
+
+    fun setCameraDescription(value: String) {
+        preferences.edit().putString(KEY_CAMERA_DESCRIPTION, cleanText(value, DEFAULT_CAMERA_DESCRIPTION)).apply()
+    }
+
+    fun comparisonUrl(): String = normalizeUrl(
+        preferences.getString(KEY_COMPARISON_URL, DEFAULT_COMPARISON_URL),
+        DEFAULT_COMPARISON_URL,
+    )
+
+    fun setComparisonUrl(value: String) {
+        preferences.edit().putString(KEY_COMPARISON_URL, normalizeUrl(value, DEFAULT_COMPARISON_URL)).apply()
+    }
+
+    fun webHost(): String = cleanText(preferences.getString(KEY_WEB_HOST, DEFAULT_WEB_HOST), DEFAULT_WEB_HOST)
+
+    fun setWebHost(value: String) {
+        preferences.edit().putString(KEY_WEB_HOST, cleanText(value, DEFAULT_WEB_HOST)).apply()
+    }
+
+    fun webPort(): Int = preferences.getInt(KEY_WEB_PORT, DEFAULT_WEB_PORT).coerceIn(1024, 65535)
+
+    fun setWebPort(value: Int) {
+        preferences.edit().putInt(KEY_WEB_PORT, value.coerceIn(1024, 65535)).apply()
+    }
+
+    fun adminPort(): Int = preferences.getInt(KEY_ADMIN_PORT, DEFAULT_ADMIN_PORT).coerceIn(1024, 65535)
+
+    fun setAdminPort(value: Int) {
+        preferences.edit().putInt(KEY_ADMIN_PORT, value.coerceIn(1024, 65535)).apply()
+    }
+
+    fun captureIntervalSeconds(): Int = preferences.getInt(
+        KEY_CAPTURE_INTERVAL_SECONDS,
+        DEFAULT_CAPTURE_INTERVAL_SECONDS,
+    ).coerceIn(5, 3600)
+
+    fun setCaptureIntervalSeconds(value: Int) {
+        preferences.edit().putInt(KEY_CAPTURE_INTERVAL_SECONDS, value.coerceIn(5, 3600)).apply()
+    }
+
+    fun sunriseSunsetFastEnabled(): Boolean = preferences.getBoolean(
+        KEY_SUNRISE_SUNSET_FAST_ENABLED,
+        DEFAULT_SUNRISE_SUNSET_FAST_ENABLED,
+    )
+
+    fun setSunriseSunsetFastEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_SUNRISE_SUNSET_FAST_ENABLED, value).apply()
+    }
+
+    fun sunriseSunsetFastIntervalSeconds(): Int = preferences.getInt(
+        KEY_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS,
+        DEFAULT_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS,
+    ).coerceIn(1, 3600)
+
+    fun setSunriseSunsetFastIntervalSeconds(value: Int) {
+        preferences.edit().putInt(KEY_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS, value.coerceIn(1, 3600)).apply()
+    }
+
+    fun sunriseOffsetStartMinutes(): Int = preferences.getInt(
+        KEY_SUNRISE_OFFSET_START_MINUTES,
+        DEFAULT_SUNRISE_OFFSET_START_MINUTES,
+    ).coerceIn(0, 360)
+
+    fun setSunriseOffsetStartMinutes(value: Int) {
+        preferences.edit().putInt(KEY_SUNRISE_OFFSET_START_MINUTES, value.coerceIn(0, 360)).apply()
+    }
+
+    fun sunriseOffsetEndMinutes(): Int = preferences.getInt(
+        KEY_SUNRISE_OFFSET_END_MINUTES,
+        DEFAULT_SUNRISE_OFFSET_END_MINUTES,
+    ).coerceIn(0, 360)
+
+    fun setSunriseOffsetEndMinutes(value: Int) {
+        preferences.edit().putInt(KEY_SUNRISE_OFFSET_END_MINUTES, value.coerceIn(0, 360)).apply()
+    }
+
+    fun sunsetOffsetStartMinutes(): Int = preferences.getInt(
+        KEY_SUNSET_OFFSET_START_MINUTES,
+        DEFAULT_SUNSET_OFFSET_START_MINUTES,
+    ).coerceIn(0, 360)
+
+    fun setSunsetOffsetStartMinutes(value: Int) {
+        preferences.edit().putInt(KEY_SUNSET_OFFSET_START_MINUTES, value.coerceIn(0, 360)).apply()
+    }
+
+    fun sunsetOffsetEndMinutes(): Int = preferences.getInt(
+        KEY_SUNSET_OFFSET_END_MINUTES,
+        DEFAULT_SUNSET_OFFSET_END_MINUTES,
+    ).coerceIn(0, 360)
+
+    fun setSunsetOffsetEndMinutes(value: Int) {
+        preferences.edit().putInt(KEY_SUNSET_OFFSET_END_MINUTES, value.coerceIn(0, 360)).apply()
+    }
+
+    fun lowNoiseIso(): Int = preferences.getInt(KEY_LOW_NOISE_ISO, DEFAULT_LOW_NOISE_ISO).coerceIn(25, 6400)
+
+    fun setLowNoiseIso(value: Int) {
+        preferences.edit().putInt(KEY_LOW_NOISE_ISO, value.coerceIn(25, 6400)).apply()
+    }
+
+    fun nightExposureSeconds(mode: LensMode): Double {
+        val key = when (mode) {
+            LensMode.ULTRA_WIDE -> KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS
+            LensMode.WIDE -> KEY_WIDE_NIGHT_EXPOSURE_SECONDS
+            LensMode.TELE -> KEY_TELE_NIGHT_EXPOSURE_SECONDS
+        }
+        val defaultValue = when (mode) {
+            LensMode.ULTRA_WIDE -> DEFAULT_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS
+            LensMode.WIDE -> DEFAULT_WIDE_NIGHT_EXPOSURE_SECONDS
+            LensMode.TELE -> DEFAULT_TELE_NIGHT_EXPOSURE_SECONDS
+        }
+        return preferences.getFloat(key, defaultValue.toFloat()).toDouble().coerceIn(0.1, 60.0)
+    }
+
+    fun setNightExposureSeconds(mode: LensMode, value: Double) {
+        val key = when (mode) {
+            LensMode.ULTRA_WIDE -> KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS
+            LensMode.WIDE -> KEY_WIDE_NIGHT_EXPOSURE_SECONDS
+            LensMode.TELE -> KEY_TELE_NIGHT_EXPOSURE_SECONDS
+        }
+        preferences.edit().putFloat(key, value.coerceIn(0.1, 60.0).toFloat()).apply()
+    }
+
+    fun nightExposureNs(mode: LensMode): Long = (nightExposureSeconds(mode) * 1_000_000_000.0).roundToLong()
+
+    fun timestampOverlayEnabled(): Boolean = preferences.getBoolean(
+        KEY_TIMESTAMP_OVERLAY_ENABLED,
+        DEFAULT_TIMESTAMP_OVERLAY_ENABLED,
+    )
+
+    fun setTimestampOverlayEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_TIMESTAMP_OVERLAY_ENABLED, value).apply()
+    }
+
+    fun sunPathOverlayEnabled(): Boolean = preferences.getBoolean(
+        KEY_SUN_PATH_OVERLAY_ENABLED,
+        DEFAULT_SUN_PATH_OVERLAY_ENABLED,
+    )
+
+    fun setSunPathOverlayEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_SUN_PATH_OVERLAY_ENABLED, value).apply()
+    }
+
+    fun overlayTimezone(): String = cleanText(
+        preferences.getString(KEY_OVERLAY_TIMEZONE, DEFAULT_OVERLAY_TIMEZONE),
+        DEFAULT_OVERLAY_TIMEZONE,
+    )
+
+    fun setOverlayTimezone(value: String) {
+        preferences.edit().putString(KEY_OVERLAY_TIMEZONE, cleanText(value, DEFAULT_OVERLAY_TIMEZONE)).apply()
+    }
+
+    fun overlayLatitude(): Double = preferences.getFloat(
+        KEY_OVERLAY_LATITUDE,
+        DEFAULT_OVERLAY_LATITUDE.toFloat(),
+    ).toDouble().coerceIn(-90.0, 90.0)
+
+    fun setOverlayLatitude(value: Double) {
+        preferences.edit().putFloat(KEY_OVERLAY_LATITUDE, value.coerceIn(-90.0, 90.0).toFloat()).apply()
+    }
+
+    fun overlayLongitude(): Double = preferences.getFloat(
+        KEY_OVERLAY_LONGITUDE,
+        DEFAULT_OVERLAY_LONGITUDE.toFloat(),
+    ).toDouble().coerceIn(-180.0, 180.0)
+
+    fun setOverlayLongitude(value: Double) {
+        preferences.edit().putFloat(KEY_OVERLAY_LONGITUDE, value.coerceIn(-180.0, 180.0).toFloat()).apply()
+    }
+
+    fun localWebUrl(): String = "http://${webHost()}:${webPort()}/"
+
+    private fun cleanText(value: String?, fallback: String): String {
+        return value?.trim()?.takeIf { it.isNotEmpty() } ?: fallback
+    }
+
+    private fun cleanPathSegment(value: String?, fallback: String): String {
+        val cleaned = cleanText(value, fallback).replace(Regex("""[^A-Za-z0-9._-]"""), "-").trim('-')
+        return cleaned.ifEmpty { fallback }
+    }
+
+    private fun normalizeUrl(value: String?, fallback: String): String {
+        val cleaned = cleanText(value, fallback)
+        if (cleaned.contains("?") || cleaned.contains("#")) {
+            return cleaned
+        }
+        return if (cleaned.endsWith("/")) cleaned else "$cleaned/"
+    }
+
+    companion object {
+        private const val KEY_LENS_MODE = "lens_mode"
+        private const val KEY_ROTATION_DEGREES = "rotation_degrees"
+        private const val KEY_EXPOSURE_MODE = "exposure_mode"
+        private const val KEY_CAMERA_NAME = "camera_name"
+        private const val KEY_DEPLOYMENT_NAME = "deployment_name"
+        private const val KEY_PUBLIC_BASE_URL = "public_base_url"
+        private const val KEY_CAMERA_DESCRIPTION = "camera_description"
+        private const val KEY_COMPARISON_URL = "comparison_url"
+        private const val KEY_WEB_HOST = "web_host"
+        private const val KEY_WEB_PORT = "web_port"
+        private const val KEY_ADMIN_PORT = "admin_port"
+        private const val KEY_CAPTURE_INTERVAL_SECONDS = "capture_interval_seconds"
+        private const val KEY_SUNRISE_SUNSET_FAST_ENABLED = "sunrise_sunset_fast_enabled"
+        private const val KEY_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS = "sunrise_sunset_fast_interval_seconds"
+        private const val KEY_SUNRISE_OFFSET_START_MINUTES = "sunrise_offset_start_minutes"
+        private const val KEY_SUNRISE_OFFSET_END_MINUTES = "sunrise_offset_end_minutes"
+        private const val KEY_SUNSET_OFFSET_START_MINUTES = "sunset_offset_start_minutes"
+        private const val KEY_SUNSET_OFFSET_END_MINUTES = "sunset_offset_end_minutes"
+        private const val KEY_LOW_NOISE_ISO = "low_noise_iso"
+        private const val KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = "ultra_wide_night_exposure_seconds"
+        private const val KEY_WIDE_NIGHT_EXPOSURE_SECONDS = "wide_night_exposure_seconds"
+        private const val KEY_TELE_NIGHT_EXPOSURE_SECONDS = "tele_night_exposure_seconds"
+        private const val KEY_TIMESTAMP_OVERLAY_ENABLED = "timestamp_overlay_enabled"
+        private const val KEY_SUN_PATH_OVERLAY_ENABLED = "sun_path_overlay_enabled"
+        private const val KEY_OVERLAY_TIMEZONE = "overlay_timezone"
+        private const val KEY_OVERLAY_LATITUDE = "overlay_latitude"
+        private const val KEY_OVERLAY_LONGITUDE = "overlay_longitude"
+        private const val DEFAULT_ROTATION_DEGREES = 0
+        private const val DEFAULT_CAMERA_NAME = "phone"
+        private const val DEFAULT_DEPLOYMENT_NAME = "p6p.fenetre.cam"
+        private const val DEFAULT_PUBLIC_BASE_URL = "https://p6p.fenetre.cam/"
+        private const val DEFAULT_CAMERA_DESCRIPTION = "Pixel 6 Pro Android camera"
+        private const val DEFAULT_COMPARISON_URL = "https://dev.fenetre.cam/fullscreen.html?camera=gopro-hero-6"
+        private const val DEFAULT_WEB_HOST = "192.168.8.242"
+        private const val DEFAULT_WEB_PORT = 8888
+        private const val DEFAULT_ADMIN_PORT = 8889
+        private const val DEFAULT_CAPTURE_INTERVAL_SECONDS = 30
+        private const val DEFAULT_SUNRISE_SUNSET_FAST_ENABLED = false
+        private const val DEFAULT_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS = 10
+        private const val DEFAULT_SUNRISE_OFFSET_START_MINUTES = 60
+        private const val DEFAULT_SUNRISE_OFFSET_END_MINUTES = 30
+        private const val DEFAULT_SUNSET_OFFSET_START_MINUTES = 30
+        private const val DEFAULT_SUNSET_OFFSET_END_MINUTES = 60
+        private const val DEFAULT_LOW_NOISE_ISO = 100
+        private const val DEFAULT_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = 25.0
+        private const val DEFAULT_WIDE_NIGHT_EXPOSURE_SECONDS = 15.0
+        private const val DEFAULT_TELE_NIGHT_EXPOSURE_SECONDS = 5.0
+        private const val DEFAULT_TIMESTAMP_OVERLAY_ENABLED = true
+        private const val DEFAULT_SUN_PATH_OVERLAY_ENABLED = true
+        private const val DEFAULT_OVERLAY_TIMEZONE = "America/Los_Angeles"
+        private const val DEFAULT_OVERLAY_LATITUDE = 37.6
+        private const val DEFAULT_OVERLAY_LONGITUDE = -122.4
+    }
+}

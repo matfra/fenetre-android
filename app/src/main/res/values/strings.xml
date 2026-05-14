@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Fenetre</string>
+    <string name="notification_channel_name">Fenetre capture</string>
+</resources>
+
