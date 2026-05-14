@@ -217,7 +217,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_power_supply_temp_celsius{power_supply=\"battery\"}",
+          "expr": "node_power_supply_temp_celsius{instance=\"$instance\",power_supply=\"battery\"}",
           "legendFormat": "battery",
           "refId": "A"
         }
@@ -282,7 +282,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_power_supply_capacity{power_supply=\"battery\"}",
+          "expr": "node_power_supply_capacity{instance=\"$instance\",power_supply=\"battery\"}",
           "legendFormat": "battery",
           "refId": "A"
         }
@@ -347,7 +347,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_thermal_zone_state{zone=\"android\"}",
+          "expr": "node_thermal_zone_state{instance=\"$instance\",zone=\"android\"}",
           "legendFormat": "thermal",
           "refId": "A"
         }
@@ -412,7 +412,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "1 - (node_filesystem_avail_bytes{device=\"android_app_data\"} / node_filesystem_size_bytes{device=\"android_app_data\"})",
+          "expr": "1 - (node_filesystem_avail_bytes{device=\"android_app_data\",instance=\"$instance\"} / node_filesystem_size_bytes{device=\"android_app_data\",instance=\"$instance\"})",
           "legendFormat": "used",
           "refId": "A"
         }
@@ -532,7 +532,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+          "expr": "node_memory_MemTotal_bytes{instance=\"$instance\"} - node_memory_MemAvailable_bytes{instance=\"$instance\"}",
           "legendFormat": "system used",
           "refId": "A"
         },
@@ -541,7 +541,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_memory_MemAvailable_bytes",
+          "expr": "node_memory_MemAvailable_bytes{instance=\"$instance\"}",
           "legendFormat": "system available",
           "refId": "B"
         },
@@ -650,7 +650,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_load1",
+          "expr": "node_load1{instance=\"$instance\"}",
           "legendFormat": "load1",
           "refId": "C"
         }
@@ -701,7 +701,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_cpu_scaling_frequency_hertz",
+          "expr": "node_cpu_scaling_frequency_hertz{instance=\"$instance\"}",
           "legendFormat": "cpu {{cpu}}",
           "refId": "A"
         }
@@ -752,7 +752,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_filesystem_size_bytes{device=\"android_app_data\"} - node_filesystem_avail_bytes{device=\"android_app_data\"}",
+          "expr": "node_filesystem_size_bytes{device=\"android_app_data\",instance=\"$instance\"} - node_filesystem_avail_bytes{device=\"android_app_data\",instance=\"$instance\"}",
           "legendFormat": "used",
           "refId": "A"
         },
@@ -761,7 +761,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_filesystem_avail_bytes{device=\"android_app_data\"}",
+          "expr": "node_filesystem_avail_bytes{device=\"android_app_data\",instance=\"$instance\"}",
           "legendFormat": "available",
           "refId": "B"
         },
@@ -770,7 +770,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_filesystem_size_bytes{device=\"android_app_data\"}",
+          "expr": "node_filesystem_size_bytes{device=\"android_app_data\",instance=\"$instance\"}",
           "legendFormat": "size",
           "refId": "C"
         },
@@ -855,7 +855,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_power_supply_capacity{power_supply=\"battery\"}",
+          "expr": "node_power_supply_capacity{instance=\"$instance\",power_supply=\"battery\"}",
           "legendFormat": "battery capacity",
           "refId": "A"
         },
@@ -864,7 +864,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_power_supply_temp_celsius{power_supply=\"battery\"}",
+          "expr": "node_power_supply_temp_celsius{instance=\"$instance\",power_supply=\"battery\"}",
           "legendFormat": "temperature",
           "refId": "B"
         },
@@ -873,7 +873,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_thermal_zone_state{zone=\"android\"}",
+          "expr": "node_thermal_zone_state{instance=\"$instance\",zone=\"android\"}",
           "legendFormat": "thermal status",
           "refId": "C"
         }
@@ -1012,7 +1012,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "node_uname_info",
+          "expr": "node_uname_info{instance=\"$instance\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -1075,7 +1075,29 @@
           "type": "prometheus",
           "uid": "$datasource"
         },
-        "definition": "label_values(fenetre_android_service_running, camera_name)",
+        "definition": "label_values(node_uname_info, instance)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Instance",
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values(node_uname_info, instance)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "$datasource"
+        },
+        "definition": "label_values(fenetre_android_service_running{instance=\"$instance\"}, camera_name)",
         "hide": 0,
         "includeAll": false,
         "label": "Camera",
@@ -1083,7 +1105,7 @@
         "name": "camera_name",
         "options": [],
         "query": {
-          "query": "label_values(fenetre_android_service_running, camera_name)",
+          "query": "label_values(fenetre_android_service_running{instance=\"$instance\"}, camera_name)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,

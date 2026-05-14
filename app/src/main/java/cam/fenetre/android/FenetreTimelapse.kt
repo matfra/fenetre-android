@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.util.Log
@@ -28,6 +29,7 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
     }
     private val running = AtomicBoolean(false)
     private val dailyRunning = AtomicBoolean(false)
+    private val codecLock = Any()
 
     fun scheduleFrequent() {
         if (!running.compareAndSet(false, true)) {
@@ -51,17 +53,20 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
             return
         }
         dailyExecutor.execute {
+            var attemptedDayDir: File? = null
             try {
                 val currentDay = storage.currentDayDir().name
                 val dayDir = storage.dayDirs()
                     .filter { it.name < currentDay }
-                    .lastOrNull { !File(it, "${it.name}.mp4").exists() }
+                    .lastOrNull { shouldBuildCompletedDay(it) }
                 if (dayDir != null) {
+                    attemptedDayDir = dayDir
                     Log.i(TAG, "Starting completed-day timelapse for ${dayDir.name}")
                     createDailyMp4(dayDir, overwrite = false)
                 }
             } catch (exception: Exception) {
                 Log.e(TAG, "Daily timelapse generation failed", exception)
+                attemptedDayDir?.let { writeDailyFailure(it, exception) }
             } finally {
                 dailyRunning.set(false)
             }
@@ -152,6 +157,12 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
     }
 
     private fun encodeSegment(images: List<File>, outputFile: File, startPtsUs: Long): Double {
+        synchronized(codecLock) {
+            return encodeSegmentLocked(images, outputFile, startPtsUs)
+        }
+    }
+
+    private fun encodeSegmentLocked(images: List<File>, outputFile: File, startPtsUs: Long): Double {
         val frameDurationUs = 1_000_000L / FRAME_RATE
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, HLS_VIDEO_WIDTH, HLS_VIDEO_HEIGHT).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar)
@@ -212,20 +223,29 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
             outputFile.delete()
         }
         tmpFile.renameTo(outputFile)
+        dailyFailureFile(dayDir).delete()
         storage.writeDailyTimelapseMetadata(dayDir, outputFile.name, images.size)
         Log.i(TAG, "Daily timelapse ${dayDir.name}: wrote ${outputFile.name}")
         return true
     }
 
     private fun encodeMp4(images: List<File>, outputFile: File) {
+        synchronized(codecLock) {
+            encodeMp4Locked(images, outputFile)
+        }
+    }
+
+    private fun encodeMp4Locked(images: List<File>, outputFile: File) {
         val frameDurationUs = 1_000_000L / FRAME_RATE
+        val encoder = dailyEncoderChoice()
+        Log.i(TAG, "Daily timelapse encoder: ${encoder.name} colorFormat=${encoder.colorFormat}")
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, DAILY_VIDEO_WIDTH, DAILY_VIDEO_HEIGHT).apply {
-            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar)
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, encoder.colorFormat)
             setInteger(MediaFormat.KEY_BIT_RATE, DAILY_BIT_RATE)
             setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
         }
-        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        val codec = MediaCodec.createByCodecName(encoder.name)
         val muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         val info = MediaCodec.BufferInfo()
         var muxerStarted = false
@@ -234,9 +254,21 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             codec.start()
             images.forEachIndexed { index, imageFile ->
-                val inputIndex = awaitInputBuffer(codec, "MP4 frame $index")
+                val inputIndex = awaitMp4InputBuffer(
+                    codec,
+                    info,
+                    muxer,
+                    onFormatChanged = { trackFormat ->
+                        videoTrack = muxer.addTrack(trackFormat)
+                        muxer.start()
+                        muxerStarted = true
+                    },
+                    videoTrack = { videoTrack },
+                    muxerStarted = { muxerStarted },
+                    label = "MP4 frame $index",
+                )
                 val inputBuffer = codec.getInputBuffer(inputIndex)
-                val frame = decodeFrameNv12(imageFile, DAILY_VIDEO_WIDTH, DAILY_VIDEO_HEIGHT)
+                val frame = decodeFrameYuv420(imageFile, DAILY_VIDEO_WIDTH, DAILY_VIDEO_HEIGHT, encoder.colorFormat)
                 inputBuffer?.clear()
                 inputBuffer?.put(frame)
                 codec.queueInputBuffer(inputIndex, 0, frame.size, index * frameDurationUs, 0)
@@ -261,6 +293,125 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
             }
             muxer.release()
         }
+    }
+
+    private fun dailyEncoderChoice(): EncoderChoice {
+        val codecs = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+            .filter { codecInfo ->
+                codecInfo.isEncoder && codecInfo.supportedTypes.any { it.equals(MediaFormat.MIMETYPE_VIDEO_AVC, ignoreCase = true) }
+            }
+        val software = codecs.firstNotNullOfOrNull { codecInfo ->
+            if (!codecInfo.name.startsWith("c2.android", ignoreCase = true) &&
+                !codecInfo.name.startsWith("OMX.google", ignoreCase = true)
+            ) {
+                null
+            } else {
+                encoderChoice(codecInfo)
+            }
+        }
+        if (software != null) {
+            return software
+        }
+        val hardware = codecs.firstNotNullOfOrNull { encoderChoice(it) }
+        if (hardware != null) {
+            return hardware
+        }
+        val fallbackCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        val fallbackName = fallbackCodec.name
+        fallbackCodec.release()
+        return EncoderChoice(fallbackName, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar)
+    }
+
+    private fun encoderChoice(codecInfo: MediaCodecInfo): EncoderChoice? {
+        val colorFormats = codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).colorFormats.toSet()
+        val colorFormat = when {
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar in colorFormats ->
+                MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar in colorFormats ->
+                MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
+            MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible in colorFormats ->
+                MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
+            else -> return null
+        }
+        return EncoderChoice(codecInfo.name, colorFormat)
+    }
+
+    private fun awaitMp4InputBuffer(
+        codec: MediaCodec,
+        info: MediaCodec.BufferInfo,
+        muxer: MediaMuxer,
+        onFormatChanged: (MediaFormat) -> Unit,
+        videoTrack: () -> Int,
+        muxerStarted: () -> Boolean,
+        label: String,
+    ): Int {
+        val deadlineNs = System.nanoTime() + CODEC_STALL_TIMEOUT_NS
+        var drainedWhileWaiting = false
+        while (true) {
+            if (Thread.currentThread().isInterrupted) {
+                throw IllegalStateException("$label interrupted while waiting for encoder input")
+            }
+            val index = codec.dequeueInputBuffer(CODEC_TIMEOUT_US)
+            if (index >= 0) {
+                if (drainedWhileWaiting) {
+                    Log.d(TAG, "$label resumed after draining encoder output")
+                }
+                return index
+            }
+            drainMp4Encoder(codec, info, muxer, onFormatChanged, videoTrack, muxerStarted)
+            drainedWhileWaiting = true
+            if (System.nanoTime() > deadlineNs) {
+                throw IllegalStateException("$label timed out waiting for encoder input")
+            }
+        }
+    }
+
+    private fun shouldBuildCompletedDay(dayDir: File): Boolean {
+        if (File(dayDir, "${dayDir.name}.mp4").exists()) {
+            return false
+        }
+        val nextRetryAtMs = readNextDailyRetryAtMs(dayDir)
+        if (nextRetryAtMs != null && System.currentTimeMillis() < nextRetryAtMs) {
+            return false
+        }
+        return true
+    }
+
+    private fun writeDailyFailure(dayDir: File, exception: Exception) {
+        File(dayDir, ".${dayDir.name}.tmp.mp4").delete()
+        val nowMs = System.currentTimeMillis()
+        val nextRetryAtMs = nowMs + DAILY_FAILURE_RETRY_DELAY_MS
+        dailyFailureFile(dayDir).writeText(
+            buildString {
+                appendLine("{")
+                appendLine("  \"failed_at_ms\": $nowMs,")
+                appendLine("  \"next_retry_at_ms\": $nextRetryAtMs,")
+                appendLine("  \"error\": \"${jsonString(exception.message ?: exception.javaClass.simpleName)}\"")
+                appendLine("}")
+            }
+        )
+        Log.w(TAG, "Daily timelapse ${dayDir.name}: next retry after $nextRetryAtMs")
+    }
+
+    private fun readNextDailyRetryAtMs(dayDir: File): Long? {
+        val marker = dailyFailureFile(dayDir)
+        if (!marker.exists()) {
+            return null
+        }
+        return Regex(""""next_retry_at_ms"\s*:\s*(\d+)""")
+            .find(marker.readText())
+            ?.groupValues
+            ?.get(1)
+            ?.toLongOrNull()
+    }
+
+    private fun dailyFailureFile(dayDir: File): File = File(dayDir, ".${dayDir.name}.daily-failure.json")
+
+    private fun jsonString(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
     }
 
     private fun drainMp4Encoder(
@@ -367,12 +518,20 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
     }
 
     private fun decodeFrameNv12(imageFile: File, width: Int, height: Int): ByteArray {
+        return decodeFrameYuv420(imageFile, width, height, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar)
+    }
+
+    private fun decodeFrameYuv420(imageFile: File, width: Int, height: Int, colorFormat: Int): ByteArray {
         val bitmap = decodeFrameBitmap(imageFile, width, height)
         val frame = ByteArray(width * height * 3 / 2)
         val pixels = IntArray(width * height)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
         var yOffset = 0
         var uvOffset = width * height
+        var uOffset = width * height
+        var vOffset = width * height + (width * height / 4)
+        val planar = colorFormat == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar ||
+            colorFormat == MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
         for (y in 0 until height) {
             val rowOffset = y * width
             for (x in 0 until width) {
@@ -385,8 +544,13 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
                 if (x % 2 == 0 && y % 2 == 0) {
                     val uValue = ((-38 * r - 74 * g + 112 * b + 128) shr 8) + 128
                     val vValue = ((112 * r - 94 * g - 18 * b + 128) shr 8) + 128
-                    frame[uvOffset++] = uValue.coerceIn(0, 255).toByte()
-                    frame[uvOffset++] = vValue.coerceIn(0, 255).toByte()
+                    if (planar) {
+                        frame[uOffset++] = uValue.coerceIn(0, 255).toByte()
+                        frame[vOffset++] = vValue.coerceIn(0, 255).toByte()
+                    } else {
+                        frame[uvOffset++] = uValue.coerceIn(0, 255).toByte()
+                        frame[uvOffset++] = vValue.coerceIn(0, 255).toByte()
+                    }
                 }
             }
         }
@@ -489,6 +653,7 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
         private const val I_FRAME_INTERVAL_SECONDS = 2
         private const val CODEC_TIMEOUT_US = 10_000L
         private const val CODEC_STALL_TIMEOUT_NS = 60_000_000_000L
+        private const val DAILY_FAILURE_RETRY_DELAY_MS = 6 * 60 * 60 * 1000L
         private const val MIN_IMAGES = 2
         private const val HLS_SEGMENT_FRAME_COUNT = FRAME_RATE
         private const val BOOTSTRAP_IMAGE_LIMIT = 120
@@ -498,6 +663,11 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
 data class HlsSegment(
     val path: String,
     val durationSeconds: Double,
+)
+
+data class EncoderChoice(
+    val name: String,
+    val colorFormat: Int,
 )
 
 data class HlsManifest(
