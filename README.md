@@ -1,6 +1,6 @@
 # Fenetre Android
 
-Native Android capture app for Fenetre.
+Native Android capture app for fenetre.cma
 
 ## Build
 
