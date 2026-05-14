@@ -170,78 +170,91 @@ class FenetreAdminServer(
         val systemMetrics = systemMetrics()
         val now = System.currentTimeMillis()
         val ageSeconds = fileStatus.metadataCapturedAtMs?.let { maxOf(0L, (now - it) / 1000L) }
+        val cameraLabels = """camera_name="${prometheusLabelValue(settings.cameraName())}""""
+        val storageLabels = """device="android_app_data",fstype="app_data",mountpoint="${rootDir.absolutePath}""""
+        val unameLabels = listOf(
+            "domainname" to "(none)",
+            "machine" to Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
+            "nodename" to (Build.MODEL ?: "unknown"),
+            "release" to (Build.VERSION.RELEASE ?: "unknown"),
+            "sysname" to "Android",
+            "version" to "SDK ${Build.VERSION.SDK_INT} ${Build.FINGERPRINT ?: "unknown"}",
+        ).joinToString(",") { (key, value) -> """$key="${prometheusLabelValue(value)}"""" }
         return buildString {
             appendLine("# HELP fenetre_android_service_running Whether the Android capture service is running.")
             appendLine("# TYPE fenetre_android_service_running gauge")
-            appendLine("fenetre_android_service_running ${if (runtime.running) 1 else 0}")
+            appendLine("fenetre_android_service_running{$cameraLabels} ${if (runtime.running) 1 else 0}")
             appendLine("# HELP fenetre_android_capture_in_progress Whether a still capture is currently in progress.")
             appendLine("# TYPE fenetre_android_capture_in_progress gauge")
-            appendLine("fenetre_android_capture_in_progress ${if (runtime.captureInProgress) 1 else 0}")
+            appendLine("fenetre_android_capture_in_progress{$cameraLabels} ${if (runtime.captureInProgress) 1 else 0}")
             appendLine("# HELP fenetre_android_latest_capture_age_seconds Age of the latest captured frame.")
             appendLine("# TYPE fenetre_android_latest_capture_age_seconds gauge")
-            appendLine("fenetre_android_latest_capture_age_seconds ${ageSeconds ?: -1}")
+            appendLine("fenetre_android_latest_capture_age_seconds{$cameraLabels} ${ageSeconds ?: -1}")
             appendLine("# HELP fenetre_android_latest_image_bytes Size of latest.jpg.")
             appendLine("# TYPE fenetre_android_latest_image_bytes gauge")
-            appendLine("fenetre_android_latest_image_bytes ${fileStatus.latestImageBytes}")
-            appendLine("# HELP fenetre_android_storage_free_bytes Free bytes on the storage volume.")
-            appendLine("# TYPE fenetre_android_storage_free_bytes gauge")
-            appendLine("fenetre_android_storage_free_bytes ${rootDir.freeSpace}")
-            appendLine("# HELP fenetre_android_storage_total_bytes Total bytes on the storage volume.")
-            appendLine("# TYPE fenetre_android_storage_total_bytes gauge")
-            appendLine("fenetre_android_storage_total_bytes ${rootDir.totalSpace}")
+            appendLine("fenetre_android_latest_image_bytes{$cameraLabels} ${fileStatus.latestImageBytes}")
+            appendLine("# HELP node_filesystem_avail_bytes Filesystem space available to non-root users in bytes.")
+            appendLine("# TYPE node_filesystem_avail_bytes gauge")
+            appendLine("node_filesystem_avail_bytes{$storageLabels} ${rootDir.freeSpace}")
+            appendLine("# HELP node_filesystem_size_bytes Filesystem size in bytes.")
+            appendLine("# TYPE node_filesystem_size_bytes gauge")
+            appendLine("node_filesystem_size_bytes{$storageLabels} ${rootDir.totalSpace}")
             appendLine("# HELP fenetre_android_capture_interval_seconds Configured capture interval.")
             appendLine("# TYPE fenetre_android_capture_interval_seconds gauge")
-            appendLine("fenetre_android_capture_interval_seconds ${settings.captureIntervalSeconds()}")
+            appendLine("fenetre_android_capture_interval_seconds{$cameraLabels} ${settings.captureIntervalSeconds()}")
             appendLine("# HELP fenetre_android_effective_capture_interval_seconds Current effective capture interval.")
             appendLine("# TYPE fenetre_android_effective_capture_interval_seconds gauge")
-            appendLine("fenetre_android_effective_capture_interval_seconds ${sunSchedule.captureIntervalSeconds()}")
+            appendLine("fenetre_android_effective_capture_interval_seconds{$cameraLabels} ${sunSchedule.captureIntervalSeconds()}")
             appendLine("# HELP fenetre_android_sunrise_sunset_fast_enabled Whether fast sunrise/sunset capture is enabled.")
             appendLine("# TYPE fenetre_android_sunrise_sunset_fast_enabled gauge")
-            appendLine("fenetre_android_sunrise_sunset_fast_enabled ${if (settings.sunriseSunsetFastEnabled()) 1 else 0}")
+            appendLine("fenetre_android_sunrise_sunset_fast_enabled{$cameraLabels} ${if (settings.sunriseSunsetFastEnabled()) 1 else 0}")
             appendLine("# HELP fenetre_android_sunrise_sunset_fast_active Whether the current time is in a fast sunrise/sunset window.")
             appendLine("# TYPE fenetre_android_sunrise_sunset_fast_active gauge")
-            appendLine("fenetre_android_sunrise_sunset_fast_active ${if (sunSchedule.isSunriseSunsetWindow()) 1 else 0}")
-            appendLine("# HELP fenetre_android_memory_total_bytes Total system memory.")
-            appendLine("# TYPE fenetre_android_memory_total_bytes gauge")
-            appendLine("fenetre_android_memory_total_bytes ${systemMetrics.memoryTotalBytes ?: -1}")
-            appendLine("# HELP fenetre_android_memory_available_bytes Available system memory.")
-            appendLine("# TYPE fenetre_android_memory_available_bytes gauge")
-            appendLine("fenetre_android_memory_available_bytes ${systemMetrics.memoryAvailableBytes ?: -1}")
-            appendLine("# HELP fenetre_android_load_average_1m System load average over one minute.")
-            appendLine("# TYPE fenetre_android_load_average_1m gauge")
-            appendLine("fenetre_android_load_average_1m ${systemMetrics.loadAverage1m ?: -1.0}")
-            appendLine("# HELP fenetre_android_cpu_usage_percent System CPU usage since the previous scrape.")
-            appendLine("# TYPE fenetre_android_cpu_usage_percent gauge")
-            appendLine("fenetre_android_cpu_usage_percent ${systemMetrics.cpuUsagePercent ?: -1.0}")
+            appendLine("fenetre_android_sunrise_sunset_fast_active{$cameraLabels} ${if (sunSchedule.isSunriseSunsetWindow()) 1 else 0}")
+            appendLine("# HELP node_uname_info Labeled system information as provided by the uname system call.")
+            appendLine("# TYPE node_uname_info gauge")
+            appendLine("node_uname_info{$unameLabels} 1")
+            appendLine("# HELP node_memory_MemTotal_bytes Memory information field MemTotal_bytes.")
+            appendLine("# TYPE node_memory_MemTotal_bytes gauge")
+            appendLine("node_memory_MemTotal_bytes ${systemMetrics.memoryTotalBytes ?: -1}")
+            appendLine("# HELP node_memory_MemAvailable_bytes Memory information field MemAvailable_bytes.")
+            appendLine("# TYPE node_memory_MemAvailable_bytes gauge")
+            appendLine("node_memory_MemAvailable_bytes ${systemMetrics.memoryAvailableBytes ?: -1}")
+            appendLine("# HELP node_load1 1m load average.")
+            appendLine("# TYPE node_load1 gauge")
+            appendLine("node_load1 ${systemMetrics.loadAverage1m ?: -1.0}")
+            appendLine("# HELP fenetre_android_node_cpu_usage_percent System CPU usage since the previous scrape; node exporter normally exposes node_cpu_seconds_total counters instead.")
+            appendLine("# TYPE fenetre_android_node_cpu_usage_percent gauge")
+            appendLine("fenetre_android_node_cpu_usage_percent{$cameraLabels} ${systemMetrics.cpuUsagePercent ?: -1.0}")
             appendLine("# HELP fenetre_android_process_cpu_time_seconds App process CPU time.")
             appendLine("# TYPE fenetre_android_process_cpu_time_seconds counter")
-            appendLine("fenetre_android_process_cpu_time_seconds ${systemMetrics.processCpuTimeSeconds}")
+            appendLine("fenetre_android_process_cpu_time_seconds{$cameraLabels} ${systemMetrics.processCpuTimeSeconds}")
             appendLine("# HELP fenetre_android_process_cpu_usage_percent App process CPU usage since the previous scrape, normalized across CPU cores.")
             appendLine("# TYPE fenetre_android_process_cpu_usage_percent gauge")
-            appendLine("fenetre_android_process_cpu_usage_percent ${systemMetrics.processCpuUsagePercent ?: -1.0}")
-            appendLine("# HELP fenetre_android_cpu_frequency_hertz Current CPU core frequency.")
-            appendLine("# TYPE fenetre_android_cpu_frequency_hertz gauge")
+            appendLine("fenetre_android_process_cpu_usage_percent{$cameraLabels} ${systemMetrics.processCpuUsagePercent ?: -1.0}")
+            appendLine("# HELP node_cpu_scaling_frequency_hertz Current scaled CPU thread frequency in hertz.")
+            appendLine("# TYPE node_cpu_scaling_frequency_hertz gauge")
             systemMetrics.cpuFrequenciesHz.forEach { (cpu, frequencyHz) ->
-                appendLine("""fenetre_android_cpu_frequency_hertz{cpu="$cpu"} $frequencyHz""")
+                appendLine("""node_cpu_scaling_frequency_hertz{cpu="$cpu"} $frequencyHz""")
             }
             appendLine("# HELP fenetre_android_process_memory_pss_bytes App process proportional set size.")
             appendLine("# TYPE fenetre_android_process_memory_pss_bytes gauge")
-            appendLine("fenetre_android_process_memory_pss_bytes ${systemMetrics.processMemoryPssBytes ?: -1}")
+            appendLine("fenetre_android_process_memory_pss_bytes{$cameraLabels} ${systemMetrics.processMemoryPssBytes ?: -1}")
             appendLine("# HELP fenetre_android_runtime_heap_used_bytes App runtime heap bytes currently used.")
             appendLine("# TYPE fenetre_android_runtime_heap_used_bytes gauge")
-            appendLine("fenetre_android_runtime_heap_used_bytes ${systemMetrics.runtimeHeapUsedBytes}")
+            appendLine("fenetre_android_runtime_heap_used_bytes{$cameraLabels} ${systemMetrics.runtimeHeapUsedBytes}")
             appendLine("# HELP fenetre_android_runtime_heap_max_bytes App runtime max heap bytes.")
             appendLine("# TYPE fenetre_android_runtime_heap_max_bytes gauge")
-            appendLine("fenetre_android_runtime_heap_max_bytes ${systemMetrics.runtimeHeapMaxBytes}")
-            appendLine("# HELP fenetre_android_battery_level_percent Battery level percent.")
-            appendLine("# TYPE fenetre_android_battery_level_percent gauge")
-            appendLine("fenetre_android_battery_level_percent ${systemMetrics.batteryLevelPercent ?: -1.0}")
-            appendLine("# HELP fenetre_android_battery_temperature_celsius Battery temperature in Celsius.")
-            appendLine("# TYPE fenetre_android_battery_temperature_celsius gauge")
-            appendLine("fenetre_android_battery_temperature_celsius ${systemMetrics.batteryTemperatureCelsius ?: -1.0}")
-            appendLine("# HELP fenetre_android_thermal_status Android thermal status enum.")
-            appendLine("# TYPE fenetre_android_thermal_status gauge")
-            appendLine("fenetre_android_thermal_status ${systemMetrics.thermalStatus ?: -1}")
+            appendLine("fenetre_android_runtime_heap_max_bytes{$cameraLabels} ${systemMetrics.runtimeHeapMaxBytes}")
+            appendLine("# HELP node_power_supply_capacity Battery capacity percentage.")
+            appendLine("# TYPE node_power_supply_capacity gauge")
+            appendLine("""node_power_supply_capacity{power_supply="battery"} ${systemMetrics.batteryLevelPercent ?: -1.0}""")
+            appendLine("# HELP node_power_supply_temp_celsius Battery temperature in Celsius.")
+            appendLine("# TYPE node_power_supply_temp_celsius gauge")
+            appendLine("""node_power_supply_temp_celsius{power_supply="battery"} ${systemMetrics.batteryTemperatureCelsius ?: -1.0}""")
+            appendLine("# HELP node_thermal_zone_state Android thermal status enum.")
+            appendLine("# TYPE node_thermal_zone_state gauge")
+            appendLine("""node_thermal_zone_state{zone="android"} ${systemMetrics.thermalStatus ?: -1}""")
         }
     }
 
@@ -522,6 +535,19 @@ class FenetreAdminServer(
                 }
             }
             append('"')
+        }
+    }
+
+    private fun prometheusLabelValue(value: String): String {
+        return buildString {
+            value.forEach { char ->
+                when (char) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '\n' -> append("\\n")
+                    else -> append(char)
+                }
+            }
         }
     }
 

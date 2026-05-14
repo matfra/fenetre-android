@@ -1,6 +1,7 @@
 package cam.fenetre.android
 
 import android.content.Context
+import android.os.Build
 import kotlin.math.roundToLong
 
 enum class LensMode(val label: String) {
@@ -46,13 +47,10 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putString(KEY_EXPOSURE_MODE, mode.name).apply()
     }
 
-    fun cameraName(): String = cleanPathSegment(
-        preferences.getString(KEY_CAMERA_NAME, DEFAULT_CAMERA_NAME),
-        DEFAULT_CAMERA_NAME,
-    )
+    fun cameraName(): String = cleanPathSegment(preferences.getString(KEY_CAMERA_NAME, null), defaultCameraName())
 
     fun setCameraName(value: String) {
-        preferences.edit().putString(KEY_CAMERA_NAME, cleanPathSegment(value, DEFAULT_CAMERA_NAME)).apply()
+        preferences.edit().putString(KEY_CAMERA_NAME, cleanPathSegment(value, defaultCameraName())).apply()
     }
 
     fun deploymentName(): String = cleanText(
@@ -259,6 +257,11 @@ class FenetreCameraSettings(context: Context) {
         return cleaned.ifEmpty { fallback }
     }
 
+    private fun defaultCameraName(): String {
+        val model = Build.MODEL?.lowercase()?.replace(Regex("""[^a-z0-9._-]"""), "-")?.trim('-')
+        return model?.takeIf { it.isNotEmpty() } ?: DEFAULT_CAMERA_NAME_FALLBACK
+    }
+
     private fun normalizeUrl(value: String?, fallback: String): String {
         val cleaned = cleanText(value, fallback)
         if (cleaned.contains("?") || cleaned.contains("#")) {
@@ -296,7 +299,7 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_OVERLAY_LATITUDE = "overlay_latitude"
         private const val KEY_OVERLAY_LONGITUDE = "overlay_longitude"
         private const val DEFAULT_ROTATION_DEGREES = 0
-        private const val DEFAULT_CAMERA_NAME = "phone"
+        private const val DEFAULT_CAMERA_NAME_FALLBACK = "android-camera"
         private const val DEFAULT_DEPLOYMENT_NAME = "p6p.fenetre.cam"
         private const val DEFAULT_PUBLIC_BASE_URL = "https://p6p.fenetre.cam/"
         private const val DEFAULT_CAMERA_DESCRIPTION = "Pixel 6 Pro Android camera"
