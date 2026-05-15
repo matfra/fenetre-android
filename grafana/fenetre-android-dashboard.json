@@ -484,9 +484,18 @@
           "expr": "fenetre_android_capture_interval_seconds{camera_name=\"$camera_name\"}",
           "legendFormat": "configured interval",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "fenetre_android_daily_vp9_bitrate_bits_per_second{camera_name=\"$camera_name\"} / 1000000",
+          "legendFormat": "vp9 bitrate Mbps",
+          "refId": "D"
         }
       ],
-      "title": "Capture Timing",
+      "title": "Capture and Encoding",
       "type": "timeseries"
     },
     {
@@ -993,6 +1002,15 @@
           "expr": "fenetre_android_thermal_paused{camera_name=\"$camera_name\"}",
           "legendFormat": "thermal paused",
           "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "fenetre_android_daily_timelapse_encoder_mode{camera_name=\"$camera_name\"}",
+          "legendFormat": "daily {{mode}}",
+          "refId": "G"
         }
       ],
       "title": "State Flags",

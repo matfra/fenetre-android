@@ -63,11 +63,12 @@ class FenetreStorage(context: Context, private val settings: FenetreCameraSettin
         )
     }
 
-    fun writeDailyTimelapseMetadata(dayDir: File, videoName: String, imageCount: Int) {
+    fun writeDailyTimelapseMetadata(dayDir: File, videoName: String, imageCount: Int, encoderMode: DailyTimelapseEncoderMode) {
         File(dayDir, "daily-timelapse.json").writeText(
             """
             {
               "video": "$videoName",
+              "encoder": "${encoderMode.name.lowercase()}",
               "image_count": $imageCount,
               "updated_at_ms": ${System.currentTimeMillis()}
             }

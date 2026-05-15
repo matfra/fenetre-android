@@ -16,7 +16,13 @@ enum class ExposureMode(val label: String) {
     NIGHT("Night"),
 }
 
+enum class DailyTimelapseEncoderMode(val label: String, val fileExtension: String) {
+    H264_FAST("H.264 fast", "mp4"),
+    VP9_HIGH_QUALITY("VP9 high quality", "webm"),
+}
+
 class FenetreCameraSettings(context: Context) {
+    private val appContext = context.applicationContext
     private val preferences = context.getSharedPreferences("fenetre_camera", Context.MODE_PRIVATE)
 
     fun lensMode(): LensMode {
@@ -115,6 +121,38 @@ class FenetreCameraSettings(context: Context) {
     fun setCaptureIntervalSeconds(value: Int) {
         preferences.edit().putInt(KEY_CAPTURE_INTERVAL_SECONDS, value.coerceIn(5, 3600)).apply()
     }
+
+    fun dailyTimelapseEncoderMode(): DailyTimelapseEncoderMode {
+        val name = preferences.getString(KEY_DAILY_TIMELAPSE_ENCODER_MODE, DailyTimelapseEncoderMode.H264_FAST.name)
+        return DailyTimelapseEncoderMode.entries.firstOrNull { it.name == name } ?: DailyTimelapseEncoderMode.H264_FAST
+    }
+
+    fun setDailyTimelapseEncoderMode(mode: DailyTimelapseEncoderMode) {
+        preferences.edit().putString(KEY_DAILY_TIMELAPSE_ENCODER_MODE, mode.name).apply()
+    }
+
+    fun dailyVp9BitrateMbps(): Double = preferences.getFloat(
+        KEY_DAILY_VP9_BITRATE_MEGABITS,
+        DEFAULT_DAILY_VP9_BITRATE_MEGABITS.toFloat(),
+    ).toDouble().coerceIn(1.0, 50.0)
+
+    fun dailyVp9BitrateBitsPerSecond(): Int = (dailyVp9BitrateMbps() * 1_000_000.0).roundToLong().toInt()
+
+    fun setDailyVp9BitrateMbps(value: Double) {
+        preferences.edit().putFloat(KEY_DAILY_VP9_BITRATE_MEGABITS, value.coerceIn(1.0, 50.0).toFloat()).apply()
+    }
+
+    fun ffmpegExecutablePath(): String {
+        return preferences.getString(KEY_FFMPEG_EXECUTABLE_PATH, "")?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: bundledFfmpegExecutablePath()
+    }
+
+    fun setFfmpegExecutablePath(value: String) {
+        preferences.edit().putString(KEY_FFMPEG_EXECUTABLE_PATH, value.trim()).apply()
+    }
+
+    fun bundledFfmpegExecutablePath(): String = FenetreBundledFfmpeg.executablePath(appContext)
 
     fun cooldownEnabled(): Boolean = preferences.getBoolean(KEY_COOLDOWN_ENABLED, DEFAULT_COOLDOWN_ENABLED)
 
@@ -300,6 +338,9 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_WEB_PORT = "web_port"
         private const val KEY_ADMIN_PORT = "admin_port"
         private const val KEY_CAPTURE_INTERVAL_SECONDS = "capture_interval_seconds"
+        private const val KEY_DAILY_TIMELAPSE_ENCODER_MODE = "daily_timelapse_encoder_mode"
+        private const val KEY_DAILY_VP9_BITRATE_MEGABITS = "daily_vp9_bitrate_megabits"
+        private const val KEY_FFMPEG_EXECUTABLE_PATH = "ffmpeg_executable_path"
         private const val KEY_COOLDOWN_ENABLED = "cooldown_enabled"
         private const val KEY_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = "cooldown_battery_temperature_celsius"
         private const val KEY_SUNRISE_SUNSET_FAST_ENABLED = "sunrise_sunset_fast_enabled"
@@ -327,6 +368,7 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_WEB_PORT = 8888
         private const val DEFAULT_ADMIN_PORT = 8889
         private const val DEFAULT_CAPTURE_INTERVAL_SECONDS = 30
+        private const val DEFAULT_DAILY_VP9_BITRATE_MEGABITS = 7.0
         private const val DEFAULT_COOLDOWN_ENABLED = true
         private const val DEFAULT_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = 45.0
         private const val DEFAULT_SUNRISE_SUNSET_FAST_ENABLED = false

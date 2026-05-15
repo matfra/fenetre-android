@@ -18,14 +18,18 @@ import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 import kotlin.math.ceil
 
-class FenetreTimelapse(private val storage: FenetreStorage) {
+class FenetreTimelapse(
+    private val storage: FenetreStorage,
+    private val settings: FenetreCameraSettings,
+) {
     private val frequentExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "fenetre-hls")
     }
     private val dailyExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "fenetre-daily-mp4")
+        Thread(runnable, "fenetre-daily-video")
     }
     private val running = AtomicBoolean(false)
     private val dailyRunning = AtomicBoolean(false)
@@ -62,7 +66,7 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
                 if (dayDir != null) {
                     attemptedDayDir = dayDir
                     Log.i(TAG, "Starting completed-day timelapse for ${dayDir.name}")
-                    createDailyMp4(dayDir, overwrite = false)
+                    createDailyTimelapse(dayDir, overwrite = false)
                 }
             } catch (exception: Exception) {
                 Log.e(TAG, "Daily timelapse generation failed", exception)
@@ -81,7 +85,7 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
             try {
                 val dayDir = storage.currentDayDir()
                 Log.i(TAG, "Starting current-day timelapse for ${dayDir.name}")
-                createDailyMp4(dayDir, overwrite = true)
+                createDailyTimelapse(dayDir, overwrite = true)
             } catch (exception: Exception) {
                 Log.e(TAG, "Daily timelapse generation failed", exception)
             } finally {
@@ -199,7 +203,7 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
         return images.size.toDouble() / FRAME_RATE.toDouble()
     }
 
-    private fun createDailyMp4(dayDir: File, overwrite: Boolean): Boolean {
+    private fun createDailyTimelapse(dayDir: File, overwrite: Boolean): Boolean {
         if (!dayDir.isDirectory) {
             return false
         }
@@ -209,24 +213,159 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
         if (images.size < MIN_IMAGES) {
             return false
         }
-        Log.i(TAG, "Daily timelapse ${dayDir.name}: ${images.size} source images")
-        val outputFile = File(dayDir, "${dayDir.name}.mp4")
+        val mode = settings.dailyTimelapseEncoderMode()
+        Log.i(TAG, "Daily timelapse ${dayDir.name}: ${images.size} source images, mode=${mode.name}")
+        val outputFile = File(dayDir, "${dayDir.name}.${mode.fileExtension}")
         if (outputFile.exists() && !overwrite) {
             return true
         }
-        val tmpFile = File(dayDir, ".${dayDir.name}.tmp.mp4")
+        val tmpFile = File(dayDir, ".${dayDir.name}.tmp.${mode.fileExtension}")
         if (tmpFile.exists()) {
             tmpFile.delete()
         }
-        encodeMp4(images, tmpFile)
+        when (mode) {
+            DailyTimelapseEncoderMode.H264_FAST -> encodeMp4(images, tmpFile)
+            DailyTimelapseEncoderMode.VP9_HIGH_QUALITY -> encodeVp9Webm(images, tmpFile)
+        }
         if (outputFile.exists()) {
             outputFile.delete()
         }
         tmpFile.renameTo(outputFile)
-        dailyFailureFile(dayDir).delete()
-        storage.writeDailyTimelapseMetadata(dayDir, outputFile.name, images.size)
+        allDailyFailureFiles(dayDir).forEach { it.delete() }
+        storage.writeDailyTimelapseMetadata(dayDir, outputFile.name, images.size, mode)
         Log.i(TAG, "Daily timelapse ${dayDir.name}: wrote ${outputFile.name}")
         return true
+    }
+
+    private fun encodeVp9Webm(images: List<File>, outputFile: File) {
+        val ffmpeg = settings.ffmpegExecutablePath()
+        if (ffmpeg.isBlank()) {
+            throw IllegalStateException("VP9 high quality requires an FFmpeg executable path with libvpx-vp9 support")
+        }
+        val passLogFile = File(outputFile.parentFile, ".${outputFile.nameWithoutExtension}.vp9-pass")
+        val inputListFile = File(outputFile.parentFile, ".${outputFile.nameWithoutExtension}.vp9-inputs.txt")
+        deleteVp9PassFiles(passLogFile)
+        try {
+            writeVp9ConcatList(inputListFile, images)
+            runVp9Pass(ffmpeg, inputListFile, passLogFile, pass = 1, outputFile = null)
+            runVp9Pass(ffmpeg, inputListFile, passLogFile, pass = 2, outputFile = outputFile)
+        } finally {
+            inputListFile.delete()
+            deleteVp9PassFiles(passLogFile)
+        }
+    }
+
+    private fun runVp9Pass(
+        ffmpeg: String,
+        inputListFile: File,
+        passLogFile: File,
+        pass: Int,
+        outputFile: File?,
+    ) {
+        val command = mutableListOf(
+            ffmpeg,
+            "-hide_banner",
+            "-stats_period",
+            "30",
+            "-nostdin",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            inputListFile.absolutePath,
+            "-r",
+            FRAME_RATE.toString(),
+            "-vf",
+            "scale=${DAILY_VIDEO_WIDTH}:${DAILY_VIDEO_HEIGHT}:force_original_aspect_ratio=decrease,pad=${DAILY_VIDEO_WIDTH}:${DAILY_VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2",
+            "-an",
+            "-c:v",
+            "libvpx-vp9",
+            "-b:v",
+            "${String.format(Locale.US, "%.3f", settings.dailyVp9BitrateMbps())}M",
+            "-pix_fmt",
+            "yuv420p",
+            "-deadline",
+            "good",
+            "-cpu-used",
+            "4",
+            "-row-mt",
+            "1",
+            "-pass",
+            pass.toString(),
+            "-passlogfile",
+            passLogFile.absolutePath,
+        )
+        if (pass == 1) {
+            command += listOf("-f", "null", "/dev/null")
+        } else {
+            command += outputFile?.absolutePath ?: throw IllegalArgumentException("VP9 pass 2 requires output file")
+        }
+        Log.i(TAG, "Starting VP9 daily timelapse pass $pass with input list ${inputListFile.name}")
+        val process = ProcessBuilder(command)
+            .redirectErrorStream(true)
+            .start()
+        val logBuffer = StringBuilder()
+        val logThread = thread(name = "fenetre-ffmpeg-vp9-pass-$pass-log") {
+            process.inputStream.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    Log.i(TAG, "ffmpeg vp9 pass $pass: $line")
+                    appendBounded(logBuffer, line)
+                }
+            }
+        }
+        try {
+            process.outputStream.close()
+            val exitCode = process.waitFor()
+            logThread.join(5_000L)
+            if (exitCode != 0) {
+                throw IllegalStateException("FFmpeg VP9 pass $pass failed with exit code $exitCode: ${logBuffer.takeLast(FFMPEG_LOG_TAIL_CHARS)}")
+            }
+        } catch (exception: Exception) {
+            process.destroyForcibly()
+            throw exception
+        }
+    }
+
+    private fun writeVp9ConcatList(inputListFile: File, images: List<File>) {
+        val frameDuration = String.format(Locale.US, "%.12f", 1.0 / FRAME_RATE.toDouble())
+        inputListFile.writeText(
+            buildString {
+                images.forEach { image ->
+                    appendLine("file '${ffmpegConcatPath(image)}'")
+                    appendLine("duration $frameDuration")
+                }
+                images.lastOrNull()?.let { image ->
+                    appendLine("file '${ffmpegConcatPath(image)}'")
+                }
+            }
+        )
+    }
+
+    private fun ffmpegConcatPath(file: File): String {
+        return file.absolutePath.replace("'", "'\\''")
+    }
+
+    private fun deleteVp9PassFiles(passLogFile: File) {
+        listOf(
+            passLogFile,
+            File("${passLogFile.absolutePath}-0.log"),
+            File("${passLogFile.absolutePath}-0.log.mbtree"),
+        ).forEach { file ->
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+    }
+
+    private fun appendBounded(buffer: StringBuilder, line: String) {
+        synchronized(buffer) {
+            buffer.append(line).append('\n')
+            if (buffer.length > FFMPEG_LOG_TAIL_CHARS * 2) {
+                buffer.delete(0, buffer.length - FFMPEG_LOG_TAIL_CHARS)
+            }
+        }
     }
 
     private fun encodeMp4(images: List<File>, outputFile: File) {
@@ -367,7 +506,8 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
     }
 
     private fun shouldBuildCompletedDay(dayDir: File): Boolean {
-        if (File(dayDir, "${dayDir.name}.mp4").exists()) {
+        val extension = settings.dailyTimelapseEncoderMode().fileExtension
+        if (File(dayDir, "${dayDir.name}.$extension").exists()) {
             return false
         }
         val nextRetryAtMs = readNextDailyRetryAtMs(dayDir)
@@ -378,12 +518,16 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
     }
 
     private fun writeDailyFailure(dayDir: File, exception: Exception) {
-        File(dayDir, ".${dayDir.name}.tmp.mp4").delete()
+        DailyTimelapseEncoderMode.entries.forEach { mode ->
+            File(dayDir, ".${dayDir.name}.tmp.${mode.fileExtension}").delete()
+        }
+        val mode = settings.dailyTimelapseEncoderMode()
         val nowMs = System.currentTimeMillis()
         val nextRetryAtMs = nowMs + DAILY_FAILURE_RETRY_DELAY_MS
-        dailyFailureFile(dayDir).writeText(
+        dailyFailureFile(dayDir, mode).writeText(
             buildString {
                 appendLine("{")
+                appendLine("  \"encoder\": \"${mode.name.lowercase()}\",")
                 appendLine("  \"failed_at_ms\": $nowMs,")
                 appendLine("  \"next_retry_at_ms\": $nextRetryAtMs,")
                 appendLine("  \"error\": \"${jsonString(exception.message ?: exception.javaClass.simpleName)}\"")
@@ -394,18 +538,28 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
     }
 
     private fun readNextDailyRetryAtMs(dayDir: File): Long? {
-        val marker = dailyFailureFile(dayDir)
-        if (!marker.exists()) {
-            return null
-        }
-        return Regex(""""next_retry_at_ms"\s*:\s*(\d+)""")
-            .find(marker.readText())
-            ?.groupValues
-            ?.get(1)
-            ?.toLongOrNull()
+        return selectedDailyFailureFiles(dayDir)
+            .firstOrNull { it.exists() }
+            ?.let { marker ->
+                Regex(""""next_retry_at_ms"\s*:\s*(\d+)""")
+                    .find(marker.readText())
+                    ?.groupValues
+                    ?.get(1)
+                    ?.toLongOrNull()
+            }
     }
 
-    private fun dailyFailureFile(dayDir: File): File = File(dayDir, ".${dayDir.name}.daily-failure.json")
+    private fun dailyFailureFile(dayDir: File, mode: DailyTimelapseEncoderMode): File {
+        return File(dayDir, ".${dayDir.name}.daily-${mode.name.lowercase()}.failure.json")
+    }
+
+    private fun selectedDailyFailureFiles(dayDir: File): List<File> {
+        return listOf(dailyFailureFile(dayDir, settings.dailyTimelapseEncoderMode()), File(dayDir, ".${dayDir.name}.daily-failure.json"))
+    }
+
+    private fun allDailyFailureFiles(dayDir: File): List<File> {
+        return DailyTimelapseEncoderMode.entries.map { dailyFailureFile(dayDir, it) } + File(dayDir, ".${dayDir.name}.daily-failure.json")
+    }
 
     private fun jsonString(value: String): String {
         return value
@@ -657,6 +811,7 @@ class FenetreTimelapse(private val storage: FenetreStorage) {
         private const val MIN_IMAGES = 2
         private const val HLS_SEGMENT_FRAME_COUNT = FRAME_RATE
         private const val BOOTSTRAP_IMAGE_LIMIT = 120
+        private const val FFMPEG_LOG_TAIL_CHARS = 6000
     }
 }
 

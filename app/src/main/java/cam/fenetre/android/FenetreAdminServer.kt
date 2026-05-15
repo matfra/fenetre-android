@@ -129,6 +129,10 @@ class FenetreAdminServer(
                 "public_base_url": ${jsonString(settings.publicBaseUrl())},
                 "capture_interval_seconds": ${settings.captureIntervalSeconds()},
                 "effective_capture_interval_seconds": ${sunSchedule.captureIntervalSeconds()},
+                "daily_timelapse_encoder": ${jsonString(settings.dailyTimelapseEncoderMode().name.lowercase())},
+                "daily_timelapse_file_extension": ${jsonString(settings.dailyTimelapseEncoderMode().fileExtension)},
+                "daily_vp9_bitrate_bits_per_second": ${settings.dailyVp9BitrateBitsPerSecond()},
+                "ffmpeg_executable_path": ${jsonString(settings.ffmpegExecutablePath())},
                 "cooldown_enabled": ${settings.cooldownEnabled()},
                 "cooldown_battery_temperature_celsius": ${settings.cooldownBatteryTemperatureCelsius()},
                 "sunrise_sunset_fast_enabled": ${settings.sunriseSunsetFastEnabled()},
@@ -215,6 +219,14 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_effective_capture_interval_seconds Current effective capture interval.")
             appendLine("# TYPE fenetre_android_effective_capture_interval_seconds gauge")
             appendLine("fenetre_android_effective_capture_interval_seconds{$cameraLabels} ${sunSchedule.captureIntervalSeconds()}")
+            appendLine("# HELP fenetre_android_daily_timelapse_encoder_mode Configured daily timelapse encoder mode as labeled one-hot gauges.")
+            appendLine("# TYPE fenetre_android_daily_timelapse_encoder_mode gauge")
+            DailyTimelapseEncoderMode.entries.forEach { mode ->
+                appendLine("""fenetre_android_daily_timelapse_encoder_mode{$cameraLabels,mode="${prometheusLabelValue(mode.name.lowercase())}"} ${if (settings.dailyTimelapseEncoderMode() == mode) 1 else 0}""")
+            }
+            appendLine("# HELP fenetre_android_daily_vp9_bitrate_bits_per_second Configured VP9 daily timelapse target bitrate.")
+            appendLine("# TYPE fenetre_android_daily_vp9_bitrate_bits_per_second gauge")
+            appendLine("fenetre_android_daily_vp9_bitrate_bits_per_second{$cameraLabels} ${settings.dailyVp9BitrateBitsPerSecond()}")
             appendLine("# HELP fenetre_android_cooldown_battery_temperature_celsius Configured battery temperature threshold for cooldown.")
             appendLine("# TYPE fenetre_android_cooldown_battery_temperature_celsius gauge")
             appendLine("fenetre_android_cooldown_battery_temperature_celsius{$cameraLabels} ${settings.cooldownBatteryTemperatureCelsius()}")
@@ -309,6 +321,7 @@ class FenetreAdminServer(
                   <dt>Exposure</dt><dd>${htmlEscape(runtime.exposureMode.label)} / ${htmlEscape(runtime.captureMode.label)}</dd>
                   <dt>Latest age</dt><dd>$latestAge</dd>
                   <dt>Latest size</dt><dd>${fileStatus.latestImageBytes} bytes</dd>
+                  <dt>Daily encoder</dt><dd>${htmlEscape(settings.dailyTimelapseEncoderMode().label)}</dd>
                   <dt>Storage free</dt><dd>${rootDir.freeSpace} bytes</dd>
                   <dt>Public UI</dt><dd><a href="${htmlEscape(settings.localWebUrl())}">${htmlEscape(settings.localWebUrl())}</a></dd>
                   <dt>Status JSON</dt><dd><a href="/status.json">/status.json</a></dd>

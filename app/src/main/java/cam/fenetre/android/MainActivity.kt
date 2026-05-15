@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         cameraSettings = FenetreCameraSettings(this)
+        FenetreBundledFfmpeg.installIfAvailable(this)
         storage = FenetreStorage(this, cameraSettings)
         setContentView(buildContentView())
         requestNeededPermissions()
@@ -128,6 +129,20 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Capture interval seconds", cameraSettings.captureIntervalSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setCaptureIntervalSeconds)
         })
+        content.addView(sectionTitle("Daily timelapse"))
+        content.addView(dailyTimelapseEncoderGroup())
+        content.addView(settingEditText(
+            "VP9 bitrate Mbps",
+            cameraSettings.dailyVp9BitrateMbps().toString(),
+            decimalInputType(),
+        ) {
+            it.toDoubleOrNull()?.let(cameraSettings::setDailyVp9BitrateMbps)
+        })
+        content.addView(settingEditText("FFmpeg executable path", cameraSettings.ffmpegExecutablePath()) {
+            cameraSettings.setFfmpegExecutablePath(it)
+        })
+        content.addView(helpText("H.264 fast uses Android MediaCodec and stays the default. VP9 high quality writes WebM and requires an FFmpeg executable with libvpx-vp9 support."))
+        content.addView(sectionTitle("Thermal"))
         content.addView(settingCheckBox("Thermal cooldown protection", cameraSettings.cooldownEnabled()) {
             cameraSettings.setCooldownEnabled(it)
         })
@@ -296,6 +311,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun dailyTimelapseEncoderGroup(): RadioGroup {
+        return RadioGroup(this).apply {
+            orientation = RadioGroup.VERTICAL
+            DailyTimelapseEncoderMode.entries.forEach { mode ->
+                addView(radioButton(mode.label, mode == cameraSettings.dailyTimelapseEncoderMode()) {
+                    cameraSettings.setDailyTimelapseEncoderMode(mode)
+                    updateStatus("${settingsSummary()}; saved daily encoder")
+                })
+            }
+        }
+    }
+
     private fun sectionTitle(title: String): TextView {
         return TextView(this).apply {
             text = title
@@ -420,7 +447,7 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s$sunriseSunset$cooldown"
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}$sunriseSunset$cooldown"
     }
 
     private fun requestNeededPermissions() {

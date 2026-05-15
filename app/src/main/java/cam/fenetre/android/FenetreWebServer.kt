@@ -180,6 +180,7 @@ class FenetreWebServer(
         val metadataVersion = if (metadata.exists()) metadata.lastModified().toString() else latestVersion
         val appTitle = settings.deploymentName()
         val comparisonUrl = settings.comparisonUrl()
+        val dailyExtension = settings.dailyTimelapseEncoderMode().fileExtension
         val comparisonLink = if (comparisonUrl.isNotBlank()) {
             """<a href="$comparisonUrl">Compare</a>"""
         } else {
@@ -239,6 +240,7 @@ class FenetreWebServer(
                 const dailyLink = document.getElementById('dailyLink');
                 const refresh = document.getElementById('refresh');
                 const cameraName = ${jsonString(cameraName)};
+                const dailyExtension = ${jsonString(dailyExtension)};
                 let chromeHidden = false;
 
                 image.addEventListener('click', () => {
@@ -281,7 +283,7 @@ class FenetreWebServer(
                       const playlist = '/photos/' + cameraName + '/' + day + '/' + day + '.m3u8';
                       const params = new URLSearchParams({ src: playlist, title: cameraName + ' ' + day });
                       setOptionalLink(timelapseLink, playlist, '/timelapse.html?' + params.toString());
-                      setOptionalLink(dailyLink, '/photos/' + cameraName + '/' + yesterday + '/' + yesterday + '.mp4');
+                      setOptionalLink(dailyLink, '/photos/' + cameraName + '/' + yesterday + '/' + yesterday + '.' + dailyExtension);
                     }
                     lens.textContent = (metadata.lens_mode || 'camera').replace('_', ' ');
                     mode.textContent = (metadata.exposure_mode || 'auto') + ' / ' + (metadata.capture_mode || 'day');
@@ -421,7 +423,7 @@ class FenetreWebServer(
                 }
               ],
               "global": {
-                "timelapse_file_extension": "mp4",
+                "timelapse_file_extension": ${jsonString(settings.dailyTimelapseEncoderMode().fileExtension)},
                 "frequent_timelapse_file_extension": "m3u8",
                 "deployment_name": ${jsonString(settings.deploymentName())},
                 "ui": {
