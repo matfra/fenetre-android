@@ -233,8 +233,32 @@ class FenetreTimelapse(
         tmpFile.renameTo(outputFile)
         allDailyFailureFiles(dayDir).forEach { it.delete() }
         storage.writeDailyTimelapseMetadata(dayDir, outputFile.name, images.size, mode)
+        cleanupFrequentTimelapseArtifactsForCompletedDay(dayDir)
         Log.i(TAG, "Daily timelapse ${dayDir.name}: wrote ${outputFile.name}")
         return true
+    }
+
+    private fun cleanupFrequentTimelapseArtifactsForCompletedDay(dayDir: File) {
+        val currentDay = storage.currentDayDir().name
+        if (dayDir.name >= currentDay) {
+            return
+        }
+        var deletedCount = 0
+        dayDir.listFiles { file ->
+            file.isFile && (
+                file.name.startsWith("segment-") && file.extension.equals("ts", ignoreCase = true) ||
+                    file.name == "${dayDir.name}.m3u8" ||
+                    file.name == ".${dayDir.name}.hls-manifest.json" ||
+                    file.name == "timelapse.json"
+                )
+        }?.forEach { file ->
+            if (file.delete()) {
+                deletedCount += 1
+            }
+        }
+        if (deletedCount > 0) {
+            Log.i(TAG, "Daily timelapse ${dayDir.name}: deleted $deletedCount frequent timelapse artifacts")
+        }
     }
 
     private fun encodeVp9Webm(images: List<File>, outputFile: File) {

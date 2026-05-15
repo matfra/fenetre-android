@@ -171,6 +171,69 @@ class FenetreCameraSettings(context: Context) {
             .apply()
     }
 
+    fun storageManagementEnabled(): Boolean = preferences.getBoolean(
+        KEY_STORAGE_MANAGEMENT_ENABLED,
+        DEFAULT_STORAGE_MANAGEMENT_ENABLED,
+    )
+
+    fun setStorageManagementEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_STORAGE_MANAGEMENT_ENABLED, value).apply()
+    }
+
+    fun storageManagementDryRun(): Boolean = preferences.getBoolean(
+        KEY_STORAGE_MANAGEMENT_DRY_RUN,
+        DEFAULT_STORAGE_MANAGEMENT_DRY_RUN,
+    )
+
+    fun setStorageManagementDryRun(value: Boolean) {
+        preferences.edit().putBoolean(KEY_STORAGE_MANAGEMENT_DRY_RUN, value).apply()
+    }
+
+    fun storageManagementCheckIntervalSeconds(): Int = preferences.getInt(
+        KEY_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS,
+        DEFAULT_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS,
+    ).coerceIn(60, 86_400)
+
+    fun setStorageManagementCheckIntervalSeconds(value: Int) {
+        preferences.edit().putInt(KEY_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS, value.coerceIn(60, 86_400)).apply()
+    }
+
+    fun storageManagementMaxSizeGb(): Int = preferences.getInt(
+        KEY_STORAGE_MANAGEMENT_MAX_SIZE_GB,
+        DEFAULT_STORAGE_MANAGEMENT_MAX_SIZE_GB,
+    ).coerceIn(1, 1024)
+
+    fun setStorageManagementMaxSizeGb(value: Int) {
+        preferences.edit().putInt(KEY_STORAGE_MANAGEMENT_MAX_SIZE_GB, value.coerceIn(1, 1024)).apply()
+    }
+
+    fun storageArchiveEnabled(): Boolean = preferences.getBoolean(
+        KEY_STORAGE_ARCHIVE_ENABLED,
+        DEFAULT_STORAGE_ARCHIVE_ENABLED,
+    )
+
+    fun setStorageArchiveEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_STORAGE_ARCHIVE_ENABLED, value).apply()
+    }
+
+    fun storageArchiveAfterDays(): Int = preferences.getInt(
+        KEY_STORAGE_ARCHIVE_AFTER_DAYS,
+        DEFAULT_STORAGE_ARCHIVE_AFTER_DAYS,
+    ).coerceIn(1, 3650)
+
+    fun setStorageArchiveAfterDays(value: Int) {
+        preferences.edit().putInt(KEY_STORAGE_ARCHIVE_AFTER_DAYS, value.coerceIn(1, 3650)).apply()
+    }
+
+    fun storageArchiveFilesToKeep(): Int = preferences.getInt(
+        KEY_STORAGE_ARCHIVE_FILES_TO_KEEP,
+        DEFAULT_STORAGE_ARCHIVE_FILES_TO_KEEP,
+    ).coerceIn(1, 10_000)
+
+    fun setStorageArchiveFilesToKeep(value: Int) {
+        preferences.edit().putInt(KEY_STORAGE_ARCHIVE_FILES_TO_KEEP, value.coerceIn(1, 10_000)).apply()
+    }
+
     fun sunriseSunsetFastEnabled(): Boolean = preferences.getBoolean(
         KEY_SUNRISE_SUNSET_FAST_ENABLED,
         DEFAULT_SUNRISE_SUNSET_FAST_ENABLED,
@@ -343,6 +406,13 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_FFMPEG_EXECUTABLE_PATH = "ffmpeg_executable_path"
         private const val KEY_COOLDOWN_ENABLED = "cooldown_enabled"
         private const val KEY_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = "cooldown_battery_temperature_celsius"
+        private const val KEY_STORAGE_MANAGEMENT_ENABLED = "storage_management_enabled"
+        private const val KEY_STORAGE_MANAGEMENT_DRY_RUN = "storage_management_dry_run"
+        private const val KEY_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS = "storage_management_check_interval_seconds"
+        private const val KEY_STORAGE_MANAGEMENT_MAX_SIZE_GB = "storage_management_max_size_gb"
+        private const val KEY_STORAGE_ARCHIVE_ENABLED = "storage_archive_enabled"
+        private const val KEY_STORAGE_ARCHIVE_AFTER_DAYS = "storage_archive_after_days"
+        private const val KEY_STORAGE_ARCHIVE_FILES_TO_KEEP = "storage_archive_files_to_keep"
         private const val KEY_SUNRISE_SUNSET_FAST_ENABLED = "sunrise_sunset_fast_enabled"
         private const val KEY_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS = "sunrise_sunset_fast_interval_seconds"
         private const val KEY_SUNRISE_OFFSET_START_MINUTES = "sunrise_offset_start_minutes"
@@ -371,6 +441,13 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_DAILY_VP9_BITRATE_MEGABITS = 7.0
         private const val DEFAULT_COOLDOWN_ENABLED = true
         private const val DEFAULT_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = 45.0
+        private const val DEFAULT_STORAGE_MANAGEMENT_ENABLED = false
+        private const val DEFAULT_STORAGE_MANAGEMENT_DRY_RUN = true
+        private const val DEFAULT_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS = 300
+        private const val DEFAULT_STORAGE_MANAGEMENT_MAX_SIZE_GB = 10
+        private const val DEFAULT_STORAGE_ARCHIVE_ENABLED = true
+        private const val DEFAULT_STORAGE_ARCHIVE_AFTER_DAYS = 3
+        private const val DEFAULT_STORAGE_ARCHIVE_FILES_TO_KEEP = 48
         private const val DEFAULT_SUNRISE_SUNSET_FAST_ENABLED = false
         private const val DEFAULT_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS = 10
         private const val DEFAULT_SUNRISE_OFFSET_START_MINUTES = 60

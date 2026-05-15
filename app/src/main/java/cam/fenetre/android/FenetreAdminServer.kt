@@ -111,6 +111,7 @@ class FenetreAdminServer(
         val runtime = runtimeStatus()
         val fileStatus = fileStatus()
         val thermal = FenetreThermal.status(context, settings)
+        val storageManagement = runtime.storageManagement
         return """
             {
               "service": {
@@ -155,7 +156,28 @@ class FenetreAdminServer(
                 "metadata_modified_ms": ${fileStatus.metadataModifiedMs},
                 "metadata_captured_at_ms": ${fileStatus.metadataCapturedAtMs},
                 "free_bytes": ${rootDir.freeSpace},
-                "total_bytes": ${rootDir.totalSpace}
+                "total_bytes": ${rootDir.totalSpace},
+                "storage_management_enabled": ${settings.storageManagementEnabled()},
+                "storage_management_dry_run": ${settings.storageManagementDryRun()},
+                "storage_management_check_interval_seconds": ${settings.storageManagementCheckIntervalSeconds()},
+                "storage_management_max_bytes": ${storageManagement.maxBytes},
+                "storage_management_size_bytes": ${storageManagement.sizeBytes},
+                "storage_management_archive_enabled": ${settings.storageArchiveEnabled()},
+                "storage_management_archive_after_days": ${settings.storageArchiveAfterDays()},
+                "storage_management_archive_files_to_keep": ${settings.storageArchiveFilesToKeep()},
+                "storage_management_in_progress": ${storageManagement.inProgress},
+                "storage_management_day_directory_count": ${storageManagement.dayDirectoryCount},
+                "storage_management_archived_day_directory_count": ${storageManagement.archivedDayDirectoryCount},
+                "storage_management_timelapse_day_directory_count": ${storageManagement.timelapseDayDirectoryCount},
+                "storage_management_daylight_day_directory_count": ${storageManagement.daylightDayDirectoryCount},
+                "storage_management_archived_days_this_run": ${storageManagement.archivedDaysThisRun},
+                "storage_management_deleted_day_directories_this_run": ${storageManagement.deletedDayDirectoriesThisRun},
+                "storage_management_deleted_bytes_this_run": ${storageManagement.deletedBytesThisRun},
+                "storage_management_dry_run_deleted_day_directories_this_run": ${storageManagement.dryRunDeletedDayDirectoriesThisRun},
+                "storage_management_dry_run_deleted_bytes_this_run": ${storageManagement.dryRunDeletedBytesThisRun},
+                "storage_management_last_started_at_ms": ${storageManagement.lastStartedAtMs},
+                "storage_management_last_completed_at_ms": ${storageManagement.lastCompletedAtMs},
+                "storage_management_last_error": ${storageManagement.lastError?.let { jsonString(it) } ?: "null"}
               },
               "thermal": {
                 "cooldown_enabled": ${thermal.enabled},
@@ -178,6 +200,7 @@ class FenetreAdminServer(
     private fun metricsText(): String {
         val runtime = runtimeStatus()
         val fileStatus = fileStatus()
+        val storageManagement = runtime.storageManagement
         val systemMetrics = systemMetrics()
         val now = System.currentTimeMillis()
         val ageSeconds = fileStatus.metadataCapturedAtMs?.let { maxOf(0L, (now - it) / 1000L) }
@@ -213,6 +236,33 @@ class FenetreAdminServer(
             appendLine("# HELP node_filesystem_size_bytes Filesystem size in bytes.")
             appendLine("# TYPE node_filesystem_size_bytes gauge")
             appendLine("node_filesystem_size_bytes{$storageLabels} ${rootDir.totalSpace}")
+            appendLine("# HELP fenetre_android_storage_management_enabled Whether storage management is enabled.")
+            appendLine("# TYPE fenetre_android_storage_management_enabled gauge")
+            appendLine("fenetre_android_storage_management_enabled{$cameraLabels} ${if (settings.storageManagementEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_android_storage_management_dry_run Whether storage management is configured for dry-run mode.")
+            appendLine("# TYPE fenetre_android_storage_management_dry_run gauge")
+            appendLine("fenetre_android_storage_management_dry_run{$cameraLabels} ${if (settings.storageManagementDryRun()) 1 else 0}")
+            appendLine("# HELP fenetre_android_storage_management_in_progress Whether a storage management pass is running.")
+            appendLine("# TYPE fenetre_android_storage_management_in_progress gauge")
+            appendLine("fenetre_android_storage_management_in_progress{$cameraLabels} ${if (storageManagement.inProgress) 1 else 0}")
+            appendLine("# HELP fenetre_android_storage_management_size_bytes App fenetre data directory size.")
+            appendLine("# TYPE fenetre_android_storage_management_size_bytes gauge")
+            appendLine("fenetre_android_storage_management_size_bytes{$cameraLabels} ${storageManagement.sizeBytes}")
+            appendLine("# HELP fenetre_android_storage_management_max_bytes Configured app fenetre data directory size limit.")
+            appendLine("# TYPE fenetre_android_storage_management_max_bytes gauge")
+            appendLine("fenetre_android_storage_management_max_bytes{$cameraLabels} ${storageManagement.maxBytes}")
+            appendLine("# HELP fenetre_android_storage_day_directories_total Number of day directories by state.")
+            appendLine("# TYPE fenetre_android_storage_day_directories_total gauge")
+            appendLine("""fenetre_android_storage_day_directories_total{$cameraLabels,state="all"} ${storageManagement.dayDirectoryCount}""")
+            appendLine("""fenetre_android_storage_day_directories_total{$cameraLabels,state="archived"} ${storageManagement.archivedDayDirectoryCount}""")
+            appendLine("""fenetre_android_storage_day_directories_total{$cameraLabels,state="timelapse"} ${storageManagement.timelapseDayDirectoryCount}""")
+            appendLine("""fenetre_android_storage_day_directories_total{$cameraLabels,state="daylight"} ${storageManagement.daylightDayDirectoryCount}""")
+            appendLine("# HELP fenetre_android_storage_management_deleted_bytes Last storage management deleted bytes.")
+            appendLine("# TYPE fenetre_android_storage_management_deleted_bytes gauge")
+            appendLine("fenetre_android_storage_management_deleted_bytes{$cameraLabels} ${storageManagement.deletedBytesThisRun}")
+            appendLine("# HELP fenetre_android_storage_management_dry_run_deleted_bytes Last storage management dry-run deleted bytes.")
+            appendLine("# TYPE fenetre_android_storage_management_dry_run_deleted_bytes gauge")
+            appendLine("fenetre_android_storage_management_dry_run_deleted_bytes{$cameraLabels} ${storageManagement.dryRunDeletedBytesThisRun}")
             appendLine("# HELP fenetre_android_capture_interval_seconds Configured capture interval.")
             appendLine("# TYPE fenetre_android_capture_interval_seconds gauge")
             appendLine("fenetre_android_capture_interval_seconds{$cameraLabels} ${settings.captureIntervalSeconds()}")
@@ -289,6 +339,7 @@ class FenetreAdminServer(
     private fun htmlStatus(): String {
         val runtime = runtimeStatus()
         val fileStatus = fileStatus()
+        val storageManagement = runtime.storageManagement
         val latestAge = fileStatus.metadataCapturedAtMs?.let {
             "${maxOf(0L, (System.currentTimeMillis() - it) / 1000L)}s"
         } ?: "n/a"
@@ -323,6 +374,9 @@ class FenetreAdminServer(
                   <dt>Latest size</dt><dd>${fileStatus.latestImageBytes} bytes</dd>
                   <dt>Daily encoder</dt><dd>${htmlEscape(settings.dailyTimelapseEncoderMode().label)}</dd>
                   <dt>Storage free</dt><dd>${rootDir.freeSpace} bytes</dd>
+                  <dt>Storage management</dt><dd>${if (settings.storageManagementEnabled()) "enabled" else "disabled"}${if (settings.storageManagementDryRun()) " dry-run" else ""}</dd>
+                  <dt>Storage size</dt><dd>${storageManagement.sizeBytes} / ${storageManagement.maxBytes} bytes</dd>
+                  <dt>Storage days</dt><dd>${storageManagement.dayDirectoryCount} total, ${storageManagement.archivedDayDirectoryCount} archived</dd>
                   <dt>Public UI</dt><dd><a href="${htmlEscape(settings.localWebUrl())}">${htmlEscape(settings.localWebUrl())}</a></dd>
                   <dt>Status JSON</dt><dd><a href="/status.json">/status.json</a></dd>
                   <dt>Metrics</dt><dd><a href="/metrics">/metrics</a></dd>
@@ -582,6 +636,7 @@ data class FenetreRuntimeStatus(
     val rotationDegrees: Int,
     val lastNotification: String,
     val thermalPaused: Boolean,
+    val storageManagement: StorageManagementStatus = StorageManagementStatus.empty(File(".")),
 )
 
 private data class FenetreFileStatus(

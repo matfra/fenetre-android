@@ -36,6 +36,7 @@ class FenetreCaptureService : LifecycleService() {
     private lateinit var cameraSettings: FenetreCameraSettings
     private lateinit var timelapse: FenetreTimelapse
     private lateinit var daylight: FenetreDaylight
+    private lateinit var storageManager: FenetreStorageManager
     private lateinit var overlays: FenetreOverlays
     private lateinit var sunSchedule: FenetreSunSchedule
     private var webServer: FenetreWebServer? = null
@@ -61,6 +62,7 @@ class FenetreCaptureService : LifecycleService() {
         storage = FenetreStorage(this, cameraSettings)
         timelapse = FenetreTimelapse(storage, cameraSettings)
         daylight = FenetreDaylight(storage)
+        storageManager = FenetreStorageManager(storage, cameraSettings)
         overlays = FenetreOverlays(cameraSettings)
         sunSchedule = FenetreSunSchedule(cameraSettings)
         createNotificationChannel()
@@ -73,6 +75,7 @@ class FenetreCaptureService : LifecycleService() {
             ACTION_CAPTURE_NOW -> captureOnce()
             ACTION_BUILD_DAILY_TIMELAPSE -> buildDailyTimelapse()
             ACTION_BUILD_DAYLIGHT -> buildDaylight()
+            ACTION_RUN_STORAGE_MANAGEMENT -> runStorageManagement()
             else -> startCapture()
         }
         return START_STICKY
@@ -84,6 +87,7 @@ class FenetreCaptureService : LifecycleService() {
         cameraExecutor.shutdown()
         timelapse.stop()
         daylight.stop()
+        storageManager.stop()
         super.onDestroy()
         webServer?.stop()
         adminServer?.stop()
@@ -97,6 +101,7 @@ class FenetreCaptureService : LifecycleService() {
         }
         running = true
         startServers()
+        storageManager.maybeSchedule()
         startForeground(NOTIFICATION_ID, buildNotification("Starting capture"))
         bindCamera()
     }
@@ -137,6 +142,13 @@ class FenetreCaptureService : LifecycleService() {
         updateNotification("Daylight build queued; web: ${webServer?.url().orEmpty()}")
     }
 
+    private fun runStorageManagement() {
+        startServers()
+        startForeground(NOTIFICATION_ID, buildNotification("Running storage management"))
+        storageManager.maybeSchedule(force = true)
+        updateNotification("Storage management queued; admin: ${adminServer?.url().orEmpty()}")
+    }
+
     private fun startServers() {
         if (webServer == null) {
             webServer = FenetreWebServer(storage.rootDir(), cameraSettings).also { it.start() }
@@ -152,6 +164,7 @@ class FenetreCaptureService : LifecycleService() {
                     rotationDegrees = rotationDegrees,
                     lastNotification = lastNotification,
                     thermalPaused = thermalStatus().paused,
+                    storageManagement = storageManager.lastStatus(),
                 )
             }).also { it.start() }
         }
@@ -341,6 +354,7 @@ class FenetreCaptureService : LifecycleService() {
             timelapse.scheduleFrequent()
             timelapse.scheduleDailyForCompletedDays()
             daylight.scheduleCompletedDays()
+            storageManager.maybeSchedule()
         }
         updateNotification("Last capture: ${photoFile.name}; web: ${webServer?.url().orEmpty()}")
         val nextMode = nextCaptureMode(exposureComposite, imageBrightness)
@@ -515,6 +529,7 @@ class FenetreCaptureService : LifecycleService() {
         const val ACTION_CAPTURE_NOW = "cam.fenetre.android.CAPTURE_NOW"
         const val ACTION_BUILD_DAILY_TIMELAPSE = "cam.fenetre.android.BUILD_DAILY_TIMELAPSE"
         const val ACTION_BUILD_DAYLIGHT = "cam.fenetre.android.BUILD_DAYLIGHT"
+        const val ACTION_RUN_STORAGE_MANAGEMENT = "cam.fenetre.android.RUN_STORAGE_MANAGEMENT"
         private const val CHANNEL_ID = "fenetre_capture"
         private const val NOTIFICATION_ID = 1001
         private const val NIGHT_FRAME_DURATION_PADDING_NS = 500_000_000L

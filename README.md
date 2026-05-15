@@ -22,6 +22,16 @@ ANDROID_HOME=/home/mathieu/Android/Sdk ./gradlew :app:assembleDebug
 
 The app serves the public camera UI on port `8888` and the admin UI/API on port `8889`.
 
+## Storage Management
+
+The Android app has an opt-in storage management system inspired by the Python service.
+
+Defaults are conservative: storage management is disabled and dry-run is enabled. When enabled, the service checks storage after captures at the configured interval, archives completed day directories, and enforces a maximum app data directory size.
+
+Archiving only touches completed days older than the configured age, after both `daylight.png` and a daily timelapse larger than 1 MB exist. It keeps a representative subset of JPEG files, defaulting to `48`, and writes an `archived` marker. Size cleanup deletes the oldest day directories under `photos/<camera>/YYYY-MM-DD` when the app's `fenetre` data directory exceeds the configured max size, defaulting to `10 GB`.
+
+The app settings screen includes controls for enabling storage management, dry-run mode, check interval, max size, archive age, and JPEGs to keep. The admin API exposes the current storage status in `/status.json` and Prometheus metrics in `/metrics`.
+
 ## Daily Timelapse Encoding
 
 The default daily timelapse encoder is `H.264 fast`, which uses Android `MediaCodec` and writes `YYYY-MM-DD.mp4`.
@@ -33,3 +43,5 @@ The bundled executable was built from FFmpeg `7.1.1` and libvpx `1.15.2`. Rebuil
 ```bash
 ANDROID_HOME=/home/mathieu/Android/Sdk scripts/build-android-ffmpeg.sh
 ```
+
+When a daily timelapse is successfully created for a completed day, the app removes that day's frequent timelapse artifacts (`segment-*.ts`, `YYYY-MM-DD.m3u8`, the HLS manifest cache, and `timelapse.json`). Current-day HLS files are kept so today's timelapse remains available while captures are still being added.

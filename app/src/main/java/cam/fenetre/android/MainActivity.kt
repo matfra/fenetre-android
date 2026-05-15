@@ -154,6 +154,35 @@ class MainActivity : ComponentActivity() {
             it.toDoubleOrNull()?.let(cameraSettings::setCooldownBatteryTemperatureCelsius)
         })
         content.addView(helpText("When enabled, capture and timelapse work pause while the battery is at or above this temperature."))
+
+        content.addView(sectionTitle("Storage management"))
+        content.addView(settingCheckBox("Storage management", cameraSettings.storageManagementEnabled()) {
+            cameraSettings.setStorageManagementEnabled(it)
+        })
+        content.addView(settingCheckBox("Storage dry run", cameraSettings.storageManagementDryRun()) {
+            cameraSettings.setStorageManagementDryRun(it)
+        })
+        content.addView(settingEditText("Storage check interval seconds", cameraSettings.storageManagementCheckIntervalSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setStorageManagementCheckIntervalSeconds)
+        })
+        content.addView(settingEditText("Storage max GB", cameraSettings.storageManagementMaxSizeGb().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setStorageManagementMaxSizeGb)
+        })
+        content.addView(settingCheckBox("Archive completed days", cameraSettings.storageArchiveEnabled()) {
+            cameraSettings.setStorageArchiveEnabled(it)
+        })
+        content.addView(settingEditText("Archive after days", cameraSettings.storageArchiveAfterDays().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setStorageArchiveAfterDays)
+        })
+        content.addView(settingEditText("Archive JPEGs to keep", cameraSettings.storageArchiveFilesToKeep().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setStorageArchiveFilesToKeep)
+        })
+        content.addView(actionButton("Run storage management") {
+            sendServiceAction(FenetreCaptureService.ACTION_RUN_STORAGE_MANAGEMENT)
+            updateStatus("Storage management requested")
+        })
+        content.addView(helpText("Archiving keeps a representative subset of JPEGs after daylight and daily timelapse files exist. Size cleanup deletes oldest day directories when the app data directory is over the configured limit."))
+
         content.addView(settingCheckBox("Fast capture near sunrise and sunset", cameraSettings.sunriseSunsetFastEnabled()) {
             cameraSettings.setSunriseSunsetFastEnabled(it)
         })
@@ -447,7 +476,12 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}$sunriseSunset$cooldown"
+        val storageManagement = if (cameraSettings.storageManagementEnabled()) {
+            "; storage ${cameraSettings.storageManagementMaxSizeGb()}GB"
+        } else {
+            ""
+        }
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}$sunriseSunset$cooldown$storageManagement"
     }
 
     private fun requestNeededPermissions() {
