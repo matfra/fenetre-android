@@ -1,12 +1,8 @@
 package cam.fenetre.android
 
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.BatteryManager
 import android.os.Build
 import android.os.Debug
-import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import java.io.BufferedOutputStream
@@ -114,11 +110,13 @@ class FenetreAdminServer(
     private fun statusJson(): String {
         val runtime = runtimeStatus()
         val fileStatus = fileStatus()
+        val thermal = FenetreThermal.status(context, settings)
         return """
             {
               "service": {
                 "running": ${runtime.running},
                 "capture_in_progress": ${runtime.captureInProgress},
+                "thermal_paused": ${runtime.thermalPaused},
                 "capture_mode": ${jsonString(runtime.captureMode.name.lowercase())},
                 "exposure_mode": ${jsonString(runtime.exposureMode.name.lowercase())},
                 "lens_mode": ${jsonString(runtime.lensMode.name.lowercase())},
@@ -131,6 +129,8 @@ class FenetreAdminServer(
                 "public_base_url": ${jsonString(settings.publicBaseUrl())},
                 "capture_interval_seconds": ${settings.captureIntervalSeconds()},
                 "effective_capture_interval_seconds": ${sunSchedule.captureIntervalSeconds()},
+                "cooldown_enabled": ${settings.cooldownEnabled()},
+                "cooldown_battery_temperature_celsius": ${settings.cooldownBatteryTemperatureCelsius()},
                 "sunrise_sunset_fast_enabled": ${settings.sunriseSunsetFastEnabled()},
                 "sunrise_sunset_fast_active": ${sunSchedule.isSunriseSunsetWindow()},
                 "sunrise_sunset_fast_interval_seconds": ${settings.sunriseSunsetFastIntervalSeconds()},
@@ -152,6 +152,13 @@ class FenetreAdminServer(
                 "metadata_captured_at_ms": ${fileStatus.metadataCapturedAtMs},
                 "free_bytes": ${rootDir.freeSpace},
                 "total_bytes": ${rootDir.totalSpace}
+              },
+              "thermal": {
+                "cooldown_enabled": ${thermal.enabled},
+                "paused": ${thermal.paused},
+                "battery_temperature_celsius": ${thermal.batteryTemperatureCelsius ?: "null"},
+                "threshold_celsius": ${thermal.thresholdCelsius},
+                "android_thermal_status": ${thermal.androidThermalStatus ?: "null"}
               },
               "server": {
                 "public_url": ${jsonString(settings.localWebUrl())},
@@ -187,6 +194,9 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_capture_in_progress Whether a still capture is currently in progress.")
             appendLine("# TYPE fenetre_android_capture_in_progress gauge")
             appendLine("fenetre_android_capture_in_progress{$cameraLabels} ${if (runtime.captureInProgress) 1 else 0}")
+            appendLine("# HELP fenetre_android_thermal_paused Whether capture and timelapse scheduling are paused for cooldown.")
+            appendLine("# TYPE fenetre_android_thermal_paused gauge")
+            appendLine("fenetre_android_thermal_paused{$cameraLabels} ${if (runtime.thermalPaused) 1 else 0}")
             appendLine("# HELP fenetre_android_latest_capture_age_seconds Age of the latest captured frame.")
             appendLine("# TYPE fenetre_android_latest_capture_age_seconds gauge")
             appendLine("fenetre_android_latest_capture_age_seconds{$cameraLabels} ${ageSeconds ?: -1}")
@@ -205,6 +215,12 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_effective_capture_interval_seconds Current effective capture interval.")
             appendLine("# TYPE fenetre_android_effective_capture_interval_seconds gauge")
             appendLine("fenetre_android_effective_capture_interval_seconds{$cameraLabels} ${sunSchedule.captureIntervalSeconds()}")
+            appendLine("# HELP fenetre_android_cooldown_battery_temperature_celsius Configured battery temperature threshold for cooldown.")
+            appendLine("# TYPE fenetre_android_cooldown_battery_temperature_celsius gauge")
+            appendLine("fenetre_android_cooldown_battery_temperature_celsius{$cameraLabels} ${settings.cooldownBatteryTemperatureCelsius()}")
+            appendLine("# HELP fenetre_android_cooldown_enabled Whether thermal cooldown protection is enabled.")
+            appendLine("# TYPE fenetre_android_cooldown_enabled gauge")
+            appendLine("fenetre_android_cooldown_enabled{$cameraLabels} ${if (settings.cooldownEnabled()) 1 else 0}")
             appendLine("# HELP fenetre_android_sunrise_sunset_fast_enabled Whether fast sunrise/sunset capture is enabled.")
             appendLine("# TYPE fenetre_android_sunrise_sunset_fast_enabled gauge")
             appendLine("fenetre_android_sunrise_sunset_fast_enabled{$cameraLabels} ${if (settings.sunriseSunsetFastEnabled()) 1 else 0}")
@@ -288,6 +304,7 @@ class FenetreAdminServer(
                 <dl>
                   <dt>Service</dt><dd>${if (runtime.running) "running" else "stopped"}</dd>
                   <dt>Capture</dt><dd>${if (runtime.captureInProgress) "in progress" else "idle"}</dd>
+                  <dt>Thermal cooldown</dt><dd>${if (runtime.thermalPaused) "paused" else "normal"}</dd>
                   <dt>Lens</dt><dd>${htmlEscape(runtime.lensMode.label)}</dd>
                   <dt>Exposure</dt><dd>${htmlEscape(runtime.exposureMode.label)} / ${htmlEscape(runtime.captureMode.label)}</dd>
                   <dt>Latest age</dt><dd>$latestAge</dd>
@@ -329,16 +346,8 @@ class FenetreAdminServer(
         val cpuFrequencies = readCpuFrequenciesHz()
         val processMemoryPssBytes = readProcessMemoryPssBytes()
         val runtime = Runtime.getRuntime()
-        val battery = readBatteryStatus()
-        val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                context.getSystemService(PowerManager::class.java)?.currentThermalStatus
-            } catch (_: Exception) {
-                null
-            }
-        } else {
-            null
-        }
+        val battery = FenetreThermal.batteryStatus(context)
+        val thermalStatus = FenetreThermal.status(context, settings).androidThermalStatus
         return FenetreSystemMetrics(
             memoryTotalBytes = meminfo["MemTotal"],
             memoryAvailableBytes = meminfo["MemAvailable"],
@@ -475,20 +484,6 @@ class FenetreAdminServer(
         }
     }
 
-    private fun readBatteryStatus(): Pair<Double?, Double?> {
-        return try {
-            val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null to null
-            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-            val levelPercent = if (level >= 0 && scale > 0) level * 100.0 / scale else null
-            val tempTenthsC = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
-            val tempC = if (tempTenthsC != Int.MIN_VALUE) tempTenthsC / 10.0 else null
-            levelPercent to tempC
-        } catch (_: Exception) {
-            null to null
-        }
-    }
-
     private fun File.readTextOrNull(): String? {
         return try {
             readText()
@@ -573,6 +568,7 @@ data class FenetreRuntimeStatus(
     val captureMode: ExposureMode,
     val rotationDegrees: Int,
     val lastNotification: String,
+    val thermalPaused: Boolean,
 )
 
 private data class FenetreFileStatus(

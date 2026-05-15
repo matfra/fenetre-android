@@ -826,6 +826,18 @@
                 "value": "short"
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cooldown threshold"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "celsius"
+              }
+            ]
           }
         ]
       },
@@ -876,6 +888,15 @@
           "expr": "node_thermal_zone_state{instance=\"$instance\",zone=\"android\"}",
           "legendFormat": "thermal status",
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "fenetre_android_cooldown_battery_temperature_celsius{camera_name=\"$camera_name\"}",
+          "legendFormat": "cooldown threshold",
+          "refId": "D"
         }
       ],
       "title": "Power and Thermal",
@@ -954,6 +975,24 @@
           "expr": "fenetre_android_sunrise_sunset_fast_active{camera_name=\"$camera_name\"}",
           "legendFormat": "fast active",
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "fenetre_android_cooldown_enabled{camera_name=\"$camera_name\"}",
+          "legendFormat": "cooldown enabled",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "expr": "fenetre_android_thermal_paused{camera_name=\"$camera_name\"}",
+          "legendFormat": "thermal paused",
+          "refId": "F"
         }
       ],
       "title": "State Flags",

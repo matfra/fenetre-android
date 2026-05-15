@@ -116,6 +116,23 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putInt(KEY_CAPTURE_INTERVAL_SECONDS, value.coerceIn(5, 3600)).apply()
     }
 
+    fun cooldownEnabled(): Boolean = preferences.getBoolean(KEY_COOLDOWN_ENABLED, DEFAULT_COOLDOWN_ENABLED)
+
+    fun setCooldownEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_COOLDOWN_ENABLED, value).apply()
+    }
+
+    fun cooldownBatteryTemperatureCelsius(): Double = preferences.getFloat(
+        KEY_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS,
+        DEFAULT_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS.toFloat(),
+    ).toDouble().coerceIn(30.0, 70.0)
+
+    fun setCooldownBatteryTemperatureCelsius(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS, value.coerceIn(30.0, 70.0).toFloat())
+            .apply()
+    }
+
     fun sunriseSunsetFastEnabled(): Boolean = preferences.getBoolean(
         KEY_SUNRISE_SUNSET_FAST_ENABLED,
         DEFAULT_SUNRISE_SUNSET_FAST_ENABLED,
@@ -283,6 +300,8 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_WEB_PORT = "web_port"
         private const val KEY_ADMIN_PORT = "admin_port"
         private const val KEY_CAPTURE_INTERVAL_SECONDS = "capture_interval_seconds"
+        private const val KEY_COOLDOWN_ENABLED = "cooldown_enabled"
+        private const val KEY_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = "cooldown_battery_temperature_celsius"
         private const val KEY_SUNRISE_SUNSET_FAST_ENABLED = "sunrise_sunset_fast_enabled"
         private const val KEY_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS = "sunrise_sunset_fast_interval_seconds"
         private const val KEY_SUNRISE_OFFSET_START_MINUTES = "sunrise_offset_start_minutes"
@@ -308,6 +327,8 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_WEB_PORT = 8888
         private const val DEFAULT_ADMIN_PORT = 8889
         private const val DEFAULT_CAPTURE_INTERVAL_SECONDS = 30
+        private const val DEFAULT_COOLDOWN_ENABLED = true
+        private const val DEFAULT_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = 45.0
         private const val DEFAULT_SUNRISE_SUNSET_FAST_ENABLED = false
         private const val DEFAULT_SUNRISE_SUNSET_FAST_INTERVAL_SECONDS = 10
         private const val DEFAULT_SUNRISE_OFFSET_START_MINUTES = 60

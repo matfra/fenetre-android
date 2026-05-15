@@ -49,6 +49,7 @@ class FenetreCaptureService : LifecycleService() {
     private var captureInProgress = false
     private var captureGeneration = 0
     private var captureTimeoutRunnable: Runnable? = null
+    private var cooldownRunnable: Runnable? = null
     private var lastNotification = "Starting"
     private var running = false
 
@@ -104,6 +105,7 @@ class FenetreCaptureService : LifecycleService() {
         mainHandler.removeCallbacksAndMessages(null)
         captureInProgress = false
         captureTimeoutRunnable = null
+        cooldownRunnable = null
         webServer?.stop()
         webServer = null
         adminServer?.stop()
@@ -114,6 +116,10 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun buildDailyTimelapse() {
         startServers()
+        if (pauseForCooldownIfNeeded()) {
+            startForeground(NOTIFICATION_ID, buildNotification("Cooling down; daily timelapse paused"))
+            return
+        }
         startForeground(NOTIFICATION_ID, buildNotification("Building daily timelapse"))
         timelapse.scheduleDailyForCurrentDay()
         updateNotification("Daily timelapse queued; web: ${webServer?.url().orEmpty()}")
@@ -121,6 +127,10 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun buildDaylight() {
         startServers()
+        if (pauseForCooldownIfNeeded()) {
+            startForeground(NOTIFICATION_ID, buildNotification("Cooling down; daylight build paused"))
+            return
+        }
         startForeground(NOTIFICATION_ID, buildNotification("Building daylight bands"))
         daylight.scheduleFullRebuild()
         updateNotification("Daylight build queued; web: ${webServer?.url().orEmpty()}")
@@ -140,6 +150,7 @@ class FenetreCaptureService : LifecycleService() {
                     captureMode = captureMode,
                     rotationDegrees = rotationDegrees,
                     lastNotification = lastNotification,
+                    thermalPaused = thermalStatus().paused,
                 )
             }).also { it.start() }
         }
@@ -167,7 +178,7 @@ class FenetreCaptureService : LifecycleService() {
                 } else {
                     applyLensMode(zoomState.value, camera.cameraControl)
                 }
-                captureOnce()
+                scheduleNextCapture(delayMs = 0L)
             },
             ContextCompat.getMainExecutor(this)
         )
@@ -219,16 +230,19 @@ class FenetreCaptureService : LifecycleService() {
         cameraControl.setZoomRatio(requestedZoom)
     }
 
-    private fun scheduleNextCapture() {
+    private fun scheduleNextCapture(delayMs: Long = sunSchedule.captureIntervalSeconds() * 1000L) {
         if (!running) {
             return
         }
-        mainHandler.postDelayed({ captureOnce() }, sunSchedule.captureIntervalSeconds() * 1000L)
+        mainHandler.postDelayed({ captureOnce() }, delayMs)
     }
 
     private fun captureOnce() {
         val capture = imageCapture
         if (!running || capture == null) {
+            return
+        }
+        if (pauseForCooldownIfNeeded()) {
             return
         }
         if (captureInProgress) {
@@ -322,9 +336,11 @@ class FenetreCaptureService : LifecycleService() {
             imageBrightness,
             captureExif,
         )
-        timelapse.scheduleFrequent()
-        timelapse.scheduleDailyForCompletedDays()
-        daylight.scheduleCompletedDays()
+        if (!pauseForCooldownIfNeeded()) {
+            timelapse.scheduleFrequent()
+            timelapse.scheduleDailyForCompletedDays()
+            daylight.scheduleCompletedDays()
+        }
         updateNotification("Last capture: ${photoFile.name}; web: ${webServer?.url().orEmpty()}")
         val nextMode = nextCaptureMode(exposureComposite, imageBrightness)
         if (nextMode != captureMode) {
@@ -334,6 +350,37 @@ class FenetreCaptureService : LifecycleService() {
             scheduleNextCapture()
         }
     }
+
+    private fun pauseForCooldownIfNeeded(): Boolean {
+        val status = thermalStatus()
+        if (!status.paused) {
+            cooldownRunnable?.let { mainHandler.removeCallbacks(it) }
+            cooldownRunnable = null
+            return false
+        }
+        val temperatureText = status.batteryTemperatureCelsius?.let { String.format("%.1fC", it) } ?: "unknown temp"
+        Log.w(
+            TAG,
+            "Thermal cooldown active: battery=$temperatureText threshold=${status.thresholdCelsius}C thermal=${status.androidThermalStatus}"
+        )
+        updateNotification("Cooling down: $temperatureText >= ${status.thresholdCelsius}C")
+        scheduleCooldownCheck()
+        return true
+    }
+
+    private fun scheduleCooldownCheck() {
+        if (!running || cooldownRunnable != null) {
+            return
+        }
+        val runnable = Runnable {
+            cooldownRunnable = null
+            captureOnce()
+        }
+        cooldownRunnable = runnable
+        mainHandler.postDelayed(runnable, COOLDOWN_CHECK_INTERVAL_MS)
+    }
+
+    private fun thermalStatus(): FenetreThermalStatus = FenetreThermal.status(this, cameraSettings)
 
     private fun resolvedCaptureMode(): ExposureMode {
         return when (exposureMode) {
@@ -472,6 +519,7 @@ class FenetreCaptureService : LifecycleService() {
         private const val NIGHT_FRAME_DURATION_PADDING_NS = 500_000_000L
         private const val MIN_CAPTURE_TIMEOUT_MS = 60_000L
         private const val CAPTURE_TIMEOUT_PADDING_MS = 15_000L
+        private const val COOLDOWN_CHECK_INTERVAL_MS = 60_000L
         private const val NIGHT_EXPOSURE_COMPOSITE = 16.0
         private const val NIGHT_BRIGHTNESS_THRESHOLD = 0.40
         private const val DAY_EXPOSURE_COMPOSITE = 1.0

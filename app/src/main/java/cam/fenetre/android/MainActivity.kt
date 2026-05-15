@@ -128,6 +128,17 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Capture interval seconds", cameraSettings.captureIntervalSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setCaptureIntervalSeconds)
         })
+        content.addView(settingCheckBox("Thermal cooldown protection", cameraSettings.cooldownEnabled()) {
+            cameraSettings.setCooldownEnabled(it)
+        })
+        content.addView(settingEditText(
+            "Cooldown battery temperature C",
+            cameraSettings.cooldownBatteryTemperatureCelsius().toString(),
+            decimalInputType(),
+        ) {
+            it.toDoubleOrNull()?.let(cameraSettings::setCooldownBatteryTemperatureCelsius)
+        })
+        content.addView(helpText("When enabled, capture and timelapse work pause while the battery is at or above this temperature."))
         content.addView(settingCheckBox("Fast capture near sunrise and sunset", cameraSettings.sunriseSunsetFastEnabled()) {
             cameraSettings.setSunriseSunsetFastEnabled(it)
         })
@@ -404,7 +415,12 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s$sunriseSunset"
+        val cooldown = if (cameraSettings.cooldownEnabled()) {
+            "; cooldown ${cameraSettings.cooldownBatteryTemperatureCelsius()}C"
+        } else {
+            ""
+        }
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s$sunriseSunset$cooldown"
     }
 
     private fun requestNeededPermissions() {
