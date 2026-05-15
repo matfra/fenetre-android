@@ -1,0 +1,16 @@
+Fenetre Android application source code is licensed under the MIT License.
+
+The bundled FFmpeg executable is licensed separately. It is built from FFmpeg
+7.1.1 with libvpx 1.15.2, without --enable-gpl and without --enable-nonfree.
+FFmpeg is licensed under the GNU Lesser General Public License version 2.1 or
+later unless GPL or nonfree components are enabled.
+
+FFmpeg: https://ffmpeg.org/
+FFmpeg license information: https://ffmpeg.org/legal.html
+FFmpeg source: https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz
+
+libvpx is licensed under the BSD 3-Clause License.
+libvpx: https://github.com/webmproject/libvpx
+libvpx source: https://github.com/webmproject/libvpx/archive/refs/tags/v1.15.2.tar.gz
+
+Build details are documented in THIRD_PARTY_NOTICES.md in the project source.

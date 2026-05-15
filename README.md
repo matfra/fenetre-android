@@ -2,6 +2,13 @@
 
 Native Android capture app for fenetre.cma
 
+## License
+
+Fenetre Android application source code is licensed under the MIT License. The
+APK bundles an FFmpeg executable for optional VP9 daily timelapse encoding; that
+binary and its libvpx dependency are licensed separately. See
+`THIRD_PARTY_NOTICES.md`.
+
 ## Build
 
 ```bash
