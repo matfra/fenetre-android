@@ -179,13 +179,7 @@ class FenetreWebServer(
         val latestVersion = if (latest.exists()) latest.lastModified().toString() else System.currentTimeMillis().toString()
         val metadataVersion = if (metadata.exists()) metadata.lastModified().toString() else latestVersion
         val appTitle = settings.deploymentName()
-        val comparisonUrl = settings.comparisonUrl()
         val dailyExtension = settings.dailyTimelapseEncoderMode().fileExtension
-        val comparisonLink = if (comparisonUrl.isNotBlank()) {
-            """<a href="$comparisonUrl">Compare</a>"""
-        } else {
-            ""
-        }
         return """
             <!doctype html>
             <html lang="en">
@@ -206,13 +200,10 @@ class FenetreWebServer(
                     <p id="captureTime">Loading capture...</p>
                   </div>
                   <nav>
-                    <a href="/photos/$cameraName/latest.jpg">Latest</a>
-                    <a href="/photos/$cameraName/metadata.json">Metadata</a>
                     <a id="timelapseLink" href="/photos/">Today's timelapse</a>
                     <a id="dailyLink" href="/photos/">Yesterday's timelapse</a>
-                    <a href="/photos/$cameraName/daylight.html">Daylight</a>
+                    <a href="/photos/$cameraName/daylight.html">Visual browser</a>
                     <a href="/photos/">Files</a>
-                    $comparisonLink
                   </nav>
                 </header>
                 <section class="hud status" aria-label="Camera status">
