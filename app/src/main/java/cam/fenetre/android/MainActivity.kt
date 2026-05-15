@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
 
         content.addView(sectionTitle("Exposure"))
         content.addView(exposureGroup())
-        content.addView(helpText("Auto keeps the current scene in Day until the frame is actually dark. Night uses long exposure with low ISO."))
+        content.addView(helpText("Adaptive low ISO caps ISO until the configured max exposure is reached, then allows ISO to rise. Phone auto leaves exposure to Android."))
 
         content.addView(sectionTitle("Rotation"))
         content.addView(rotationGroup())
@@ -202,12 +202,12 @@ class MainActivity : ComponentActivity() {
             it.toIntOrNull()?.let(cameraSettings::setSunsetOffsetEndMinutes)
         })
         content.addView(helpText("Fast capture uses the overlay timezone, latitude, and longitude. Defaults match the Python service windows."))
-        content.addView(settingEditText("Night ISO", cameraSettings.lowNoiseIso().toString(), InputType.TYPE_CLASS_NUMBER) {
+        content.addView(settingEditText("ISO cap", cameraSettings.lowNoiseIso().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setLowNoiseIso)
         })
         LensMode.entries.forEach { mode ->
-            content.addView(settingEditText("${mode.label} night exposure seconds", cameraSettings.nightExposureSeconds(mode).toString(), decimalInputType()) {
-                it.toDoubleOrNull()?.let { seconds -> cameraSettings.setNightExposureSeconds(mode, seconds) }
+            content.addView(settingEditText("${mode.label} max exposure seconds", cameraSettings.maxExposureSeconds(mode).toString(), decimalInputType()) {
+                it.toDoubleOrNull()?.let { seconds -> cameraSettings.setMaxExposureSeconds(mode, seconds) }
             })
         }
 

@@ -28,6 +28,8 @@ import androidx.lifecycle.LifecycleService
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 class FenetreCaptureService : LifecycleService() {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -45,7 +47,7 @@ class FenetreCaptureService : LifecycleService() {
     private var lensMode = LensMode.ULTRA_WIDE
     private var rotationDegrees = 90
     private var exposureMode = ExposureMode.AUTO
-    private var captureMode = ExposureMode.DAY
+    private var captureMode = ExposureMode.AUTO
     private var manualExposureSettings: ManualExposureSettings? = null
     private var captureInProgress = false
     private var captureGeneration = 0
@@ -170,7 +172,7 @@ class FenetreCaptureService : LifecycleService() {
         }
     }
 
-    private fun bindCamera() {
+    private fun bindCamera(scheduleDelayMs: Long = 0L) {
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener(
             {
@@ -179,7 +181,9 @@ class FenetreCaptureService : LifecycleService() {
                 rotationDegrees = cameraSettings.rotationDegrees()
                 exposureMode = cameraSettings.exposureMode()
                 captureMode = resolvedCaptureMode()
-                manualExposureSettings = if (captureMode == ExposureMode.NIGHT) nightExposureSettings() else null
+                if (exposureMode != ExposureMode.AUTO) {
+                    manualExposureSettings = null
+                }
                 val capture = buildImageCapture(captureMode)
 
                 clearCaptureInProgress()
@@ -192,7 +196,7 @@ class FenetreCaptureService : LifecycleService() {
                 } else {
                     applyLensMode(zoomState.value, camera.cameraControl)
                 }
-                scheduleNextCapture(delayMs = 0L)
+                scheduleNextCapture(delayMs = scheduleDelayMs)
             },
             ContextCompat.getMainExecutor(this)
         )
@@ -212,8 +216,8 @@ class FenetreCaptureService : LifecycleService() {
             CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
             CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF
         )
-        if (mode == ExposureMode.NIGHT) {
-            val settings = manualExposureSettings ?: nightExposureSettings()
+        if (mode == ExposureMode.AUTO && manualExposureSettings != null) {
+            val settings = manualExposureSettings ?: return builder.build()
             extender.setCaptureRequestOption(
                 CaptureRequest.CONTROL_AE_MODE,
                 CaptureRequest.CONTROL_AE_MODE_OFF
@@ -327,7 +331,11 @@ class FenetreCaptureService : LifecycleService() {
     }
 
     private fun captureTimeoutMs(): Long {
-        val exposureMs = manualExposureSettings?.frameDurationNs?.let { it / 1_000_000L } ?: 0L
+        val exposureMs = if (exposureMode == ExposureMode.AUTO) {
+            manualExposureSettings?.frameDurationNs?.let { it / 1_000_000L } ?: 0L
+        } else {
+            0L
+        }
         return maxOf(MIN_CAPTURE_TIMEOUT_MS, exposureMs * 3L + CAPTURE_TIMEOUT_PADDING_MS)
     }
 
@@ -357,10 +365,10 @@ class FenetreCaptureService : LifecycleService() {
             storageManager.maybeSchedule()
         }
         updateNotification("Last capture: ${photoFile.name}; web: ${webServer?.url().orEmpty()}")
-        val nextMode = nextCaptureMode(exposureComposite, imageBrightness)
-        if (nextMode != captureMode) {
-            captureMode = nextMode
-            mainHandler.post { bindCamera() }
+        val nextManualExposure = nextManualExposureSettings(captureExif, imageBrightness)
+        if (nextManualExposure != manualExposureSettings) {
+            manualExposureSettings = nextManualExposure
+            mainHandler.post { bindCamera(scheduleDelayMs = sunSchedule.captureIntervalSeconds() * 1000L) }
         } else {
             scheduleNextCapture()
         }
@@ -397,36 +405,64 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun thermalStatus(): FenetreThermalStatus = FenetreThermal.status(this, cameraSettings)
 
-    private fun resolvedCaptureMode(): ExposureMode {
-        return when (exposureMode) {
-            ExposureMode.AUTO -> captureMode
-            ExposureMode.DAY -> ExposureMode.DAY
-            ExposureMode.NIGHT -> ExposureMode.NIGHT
-        }
-    }
+    private fun resolvedCaptureMode(): ExposureMode = exposureMode
 
-    private fun nightExposureSettings(): ManualExposureSettings {
-        val targetExposureNs = when (lensMode) {
-            LensMode.ULTRA_WIDE -> cameraSettings.nightExposureNs(LensMode.ULTRA_WIDE)
-            LensMode.WIDE -> cameraSettings.nightExposureNs(LensMode.WIDE)
-            LensMode.TELE -> cameraSettings.nightExposureNs(LensMode.TELE)
+    private fun nextManualExposureSettings(captureExif: CaptureExif, imageBrightness: Double?): ManualExposureSettings? {
+        if (exposureMode != ExposureMode.AUTO) {
+            return null
+        }
+        val currentIso = captureExif.iso ?: return manualExposureSettings
+        val currentExposureNs = captureExif.exposureTimeSeconds
+            ?.let { (it * 1_000_000_000.0).roundToLong() }
+            ?: return manualExposureSettings
+        if (currentExposureNs <= 0L) {
+            return manualExposureSettings
         }
         val characteristics = backCameraCharacteristics()
         val exposureRange = characteristics?.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
         val sensitivityRange = characteristics?.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
         val maxFrameDuration = characteristics?.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
 
-        val exposureNs = exposureRange?.let { range ->
-            targetExposureNs.coerceIn(range.lower, range.upper)
-        } ?: targetExposureNs
-        val iso = sensitivityRange?.let { range ->
-            cameraSettings.lowNoiseIso().coerceIn(range.lower, range.upper)
-        } ?: cameraSettings.lowNoiseIso()
-        val targetFrameDuration = exposureNs + NIGHT_FRAME_DURATION_PADDING_NS
+        val minExposureNs = exposureRange?.lower ?: MIN_MANUAL_EXPOSURE_NS
+        val maxExposureNs = exposureRange?.let { range ->
+            cameraSettings.maxExposureNs(lensMode).coerceIn(range.lower, range.upper)
+        } ?: cameraSettings.maxExposureNs(lensMode)
+        val minIso = sensitivityRange?.lower ?: MIN_MANUAL_ISO
+        val maxIso = sensitivityRange?.upper ?: MAX_MANUAL_ISO
+        val isoCap = cameraSettings.lowNoiseIso().coerceIn(minIso, maxIso)
+        val brightnessFactor = exposureAdjustmentFactor(imageBrightness)
+        val desiredComposite = currentIso.toDouble() * currentExposureNs.toDouble() * brightnessFactor
+        val exposureAtIsoCap = (desiredComposite / isoCap.toDouble()).roundToLong()
+        val exposureNs: Long
+        val iso: Int
+        if (exposureAtIsoCap <= maxExposureNs) {
+            exposureNs = exposureAtIsoCap.coerceIn(minExposureNs, maxExposureNs)
+            iso = if (exposureAtIsoCap < minExposureNs) {
+                (desiredComposite / minExposureNs.toDouble()).roundToInt().coerceIn(minIso, isoCap)
+            } else {
+                isoCap
+            }
+        } else {
+            exposureNs = maxExposureNs
+            iso = (desiredComposite / maxExposureNs.toDouble()).roundToInt().coerceIn(isoCap, maxIso)
+        }
+        val targetFrameDuration = exposureNs + FRAME_DURATION_PADDING_NS
         val frameDurationNs = maxFrameDuration?.let { maxDuration ->
             targetFrameDuration.coerceIn(exposureNs, maxDuration)
         } ?: targetFrameDuration
         return ManualExposureSettings(exposureNs, frameDurationNs, iso)
+    }
+
+    private fun exposureAdjustmentFactor(imageBrightness: Double?): Double {
+        val brightness = imageBrightness ?: return 1.0
+        if (brightness <= 0.0) {
+            return MAX_EXPOSURE_ADJUSTMENT_FACTOR
+        }
+        val rawFactor = TARGET_LUMA / brightness
+        if (rawFactor in (1.0 - EXPOSURE_DEADBAND)..(1.0 + EXPOSURE_DEADBAND)) {
+            return 1.0
+        }
+        return rawFactor.coerceIn(MIN_EXPOSURE_ADJUSTMENT_FACTOR, MAX_EXPOSURE_ADJUSTMENT_FACTOR)
     }
 
     private fun backCameraCharacteristics(): CameraCharacteristics? {
@@ -440,29 +476,6 @@ class FenetreCaptureService : LifecycleService() {
         } catch (exception: Exception) {
             Log.w(TAG, "Unable to read camera characteristics", exception)
             null
-        }
-    }
-
-    private fun nextCaptureMode(exposureComposite: Double?, imageBrightness: Double?): ExposureMode {
-        return when (exposureMode) {
-            ExposureMode.DAY -> ExposureMode.DAY
-            ExposureMode.NIGHT -> ExposureMode.NIGHT
-            ExposureMode.AUTO -> {
-                when {
-                    captureMode != ExposureMode.NIGHT &&
-                        exposureComposite != null &&
-                        exposureComposite > NIGHT_EXPOSURE_COMPOSITE &&
-                        imageBrightness != null &&
-                        imageBrightness < NIGHT_BRIGHTNESS_THRESHOLD -> ExposureMode.NIGHT
-                    captureMode != ExposureMode.DAY &&
-                        imageBrightness != null &&
-                        imageBrightness > DAY_BRIGHTNESS_THRESHOLD -> ExposureMode.DAY
-                    captureMode != ExposureMode.DAY &&
-                        exposureComposite != null &&
-                        exposureComposite < DAY_EXPOSURE_COMPOSITE -> ExposureMode.DAY
-                    else -> captureMode
-                }
-            }
         }
     }
 
@@ -532,14 +545,17 @@ class FenetreCaptureService : LifecycleService() {
         const val ACTION_RUN_STORAGE_MANAGEMENT = "cam.fenetre.android.RUN_STORAGE_MANAGEMENT"
         private const val CHANNEL_ID = "fenetre_capture"
         private const val NOTIFICATION_ID = 1001
-        private const val NIGHT_FRAME_DURATION_PADDING_NS = 500_000_000L
+        private const val FRAME_DURATION_PADDING_NS = 500_000_000L
+        private const val MIN_MANUAL_EXPOSURE_NS = 100_000L
+        private const val MIN_MANUAL_ISO = 25
+        private const val MAX_MANUAL_ISO = 6400
         private const val MIN_CAPTURE_TIMEOUT_MS = 60_000L
         private const val CAPTURE_TIMEOUT_PADDING_MS = 15_000L
         private const val COOLDOWN_CHECK_INTERVAL_MS = 60_000L
-        private const val NIGHT_EXPOSURE_COMPOSITE = 16.0
-        private const val NIGHT_BRIGHTNESS_THRESHOLD = 0.40
-        private const val DAY_EXPOSURE_COMPOSITE = 1.0
-        private const val DAY_BRIGHTNESS_THRESHOLD = 0.995
+        private const val TARGET_LUMA = 0.45
+        private const val EXPOSURE_DEADBAND = 0.08
+        private const val MIN_EXPOSURE_ADJUSTMENT_FACTOR = 0.8
+        private const val MAX_EXPOSURE_ADJUSTMENT_FACTOR = 1.25
         private const val LUMA_SAMPLE_SIZE = 256
         private const val TAG = "FenetreCaptureService"
     }

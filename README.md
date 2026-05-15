@@ -29,6 +29,21 @@ ANDROID_HOME=/home/mathieu/Android/Sdk ./gradlew :app:assembleDebug
 
 The app serves the public camera UI on port `8888` and the admin UI/API on port `8889`.
 
+## Exposure Control
+
+The default exposure mode is `Adaptive low ISO`. The first frame after startup
+uses Android auto exposure as a baseline. After that, the app applies manual
+sensor controls using the last frame's EXIF and measured brightness:
+
+- keep ISO at or below the configured ISO cap, default `100`, while exposure
+  time can still increase;
+- clamp exposure time at the configured per-lens max, defaulting to `25s` for
+  ultra-wide, `15s` for wide, and `5s` for tele;
+- once the exposure max is reached, allow ISO to rise above the cap.
+
+`Phone auto` is available as a fallback and leaves exposure decisions to
+Android/CameraX.
+
 ## Storage Management
 
 The Android app has an opt-in storage management system inspired by the Python service.

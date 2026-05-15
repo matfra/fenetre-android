@@ -11,9 +11,8 @@ enum class LensMode(val label: String) {
 }
 
 enum class ExposureMode(val label: String) {
-    AUTO("Auto"),
-    DAY("Day"),
-    NIGHT("Night"),
+    AUTO("Adaptive low ISO"),
+    PHONE_AUTO("Phone auto"),
 }
 
 enum class DailyTimelapseEncoderMode(val label: String, val fileExtension: String) {
@@ -294,7 +293,7 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putInt(KEY_LOW_NOISE_ISO, value.coerceIn(25, 6400)).apply()
     }
 
-    fun nightExposureSeconds(mode: LensMode): Double {
+    fun maxExposureSeconds(mode: LensMode): Double {
         val key = when (mode) {
             LensMode.ULTRA_WIDE -> KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS
             LensMode.WIDE -> KEY_WIDE_NIGHT_EXPOSURE_SECONDS
@@ -308,7 +307,7 @@ class FenetreCameraSettings(context: Context) {
         return preferences.getFloat(key, defaultValue.toFloat()).toDouble().coerceIn(0.1, 60.0)
     }
 
-    fun setNightExposureSeconds(mode: LensMode, value: Double) {
+    fun setMaxExposureSeconds(mode: LensMode, value: Double) {
         val key = when (mode) {
             LensMode.ULTRA_WIDE -> KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS
             LensMode.WIDE -> KEY_WIDE_NIGHT_EXPOSURE_SECONDS
@@ -317,7 +316,7 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putFloat(key, value.coerceIn(0.1, 60.0).toFloat()).apply()
     }
 
-    fun nightExposureNs(mode: LensMode): Long = (nightExposureSeconds(mode) * 1_000_000_000.0).roundToLong()
+    fun maxExposureNs(mode: LensMode): Long = (maxExposureSeconds(mode) * 1_000_000_000.0).roundToLong()
 
     fun timestampOverlayEnabled(): Boolean = preferences.getBoolean(
         KEY_TIMESTAMP_OVERLAY_ENABLED,
