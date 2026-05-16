@@ -136,6 +136,7 @@ class FenetreAdminServer(
                 "ffmpeg_executable_path": ${jsonString(settings.ffmpegExecutablePath())},
                 "cooldown_enabled": ${settings.cooldownEnabled()},
                 "cooldown_battery_temperature_celsius": ${settings.cooldownBatteryTemperatureCelsius()},
+                "cooldown_thermal_status_threshold": ${settings.cooldownThermalStatusThreshold().value},
                 "sunrise_sunset_fast_enabled": ${settings.sunriseSunsetFastEnabled()},
                 "sunrise_sunset_fast_active": ${sunSchedule.isSunriseSunsetWindow()},
                 "sunrise_sunset_fast_interval_seconds": ${settings.sunriseSunsetFastIntervalSeconds()},
@@ -184,6 +185,7 @@ class FenetreAdminServer(
                 "paused": ${thermal.paused},
                 "battery_temperature_celsius": ${thermal.batteryTemperatureCelsius ?: "null"},
                 "threshold_celsius": ${thermal.thresholdCelsius},
+                "thermal_status_threshold": ${thermal.thermalStatusThreshold},
                 "android_thermal_status": ${thermal.androidThermalStatus ?: "null"}
               },
               "server": {
@@ -283,6 +285,9 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_cooldown_enabled Whether thermal cooldown protection is enabled.")
             appendLine("# TYPE fenetre_android_cooldown_enabled gauge")
             appendLine("fenetre_android_cooldown_enabled{$cameraLabels} ${if (settings.cooldownEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_android_cooldown_thermal_status_threshold Configured Android thermal status threshold for cooldown.")
+            appendLine("# TYPE fenetre_android_cooldown_thermal_status_threshold gauge")
+            appendLine("fenetre_android_cooldown_thermal_status_threshold{$cameraLabels} ${settings.cooldownThermalStatusThreshold().value}")
             appendLine("# HELP fenetre_android_sunrise_sunset_fast_enabled Whether fast sunrise/sunset capture is enabled.")
             appendLine("# TYPE fenetre_android_sunrise_sunset_fast_enabled gauge")
             appendLine("fenetre_android_sunrise_sunset_fast_enabled{$cameraLabels} ${if (settings.sunriseSunsetFastEnabled()) 1 else 0}")

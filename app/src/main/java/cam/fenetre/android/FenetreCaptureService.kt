@@ -85,6 +85,7 @@ class FenetreCaptureService : LifecycleService() {
 
     override fun onDestroy() {
         running = false
+        serviceRunning = false
         mainHandler.removeCallbacksAndMessages(null)
         cameraExecutor.shutdown()
         timelapse.stop()
@@ -102,6 +103,7 @@ class FenetreCaptureService : LifecycleService() {
             return
         }
         running = true
+        serviceRunning = true
         startServers()
         storageManager.maybeSchedule()
         startForeground(NOTIFICATION_ID, buildNotification("Starting capture"))
@@ -110,8 +112,10 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun stopCapture() {
         running = false
+        serviceRunning = false
         mainHandler.removeCallbacksAndMessages(null)
         captureInProgress = false
+        serviceCaptureInProgress = false
         captureTimeoutRunnable = null
         cooldownRunnable = null
         webServer?.stop()
@@ -295,6 +299,7 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun beginCapture(photoFile: File): Int {
         captureInProgress = true
+        serviceCaptureInProgress = true
         captureGeneration += 1
         val generation = captureGeneration
         val timeoutMs = captureTimeoutMs()
@@ -304,6 +309,7 @@ class FenetreCaptureService : LifecycleService() {
             }
             Log.w(TAG, "Capture timed out after ${timeoutMs}ms: ${photoFile.name}")
             captureInProgress = false
+            serviceCaptureInProgress = false
             imageCapture = null
             if (photoFile.exists()) {
                 photoFile.delete()
@@ -326,6 +332,7 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun clearCaptureInProgress() {
         captureInProgress = false
+        serviceCaptureInProgress = false
         captureTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
         captureTimeoutRunnable = null
     }
@@ -502,12 +509,14 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun updateNotification(text: String) {
         lastNotification = text
+        serviceLastNotification = text
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, buildNotification(text))
     }
 
     private fun buildNotification(text: String): Notification {
         lastNotification = text
+        serviceLastNotification = text
         val intent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -543,6 +552,18 @@ class FenetreCaptureService : LifecycleService() {
         const val ACTION_BUILD_DAILY_TIMELAPSE = "cam.fenetre.android.BUILD_DAILY_TIMELAPSE"
         const val ACTION_BUILD_DAYLIGHT = "cam.fenetre.android.BUILD_DAYLIGHT"
         const val ACTION_RUN_STORAGE_MANAGEMENT = "cam.fenetre.android.RUN_STORAGE_MANAGEMENT"
+        @Volatile private var serviceRunning = false
+        @Volatile private var serviceCaptureInProgress = false
+        @Volatile private var serviceLastNotification = "Not started"
+
+        fun runtimeSnapshot(): FenetreServiceSnapshot {
+            return FenetreServiceSnapshot(
+                running = serviceRunning,
+                captureInProgress = serviceCaptureInProgress,
+                lastNotification = serviceLastNotification,
+            )
+        }
+
         private const val CHANNEL_ID = "fenetre_capture"
         private const val NOTIFICATION_ID = 1001
         private const val FRAME_DURATION_PADDING_NS = 500_000_000L
@@ -568,3 +589,9 @@ data class ManualExposureSettings(
 ) {
     fun exposureTimeSeconds(): Double = exposureTimeNs / 1_000_000_000.0
 }
+
+data class FenetreServiceSnapshot(
+    val running: Boolean,
+    val captureInProgress: Boolean,
+    val lastNotification: String,
+)

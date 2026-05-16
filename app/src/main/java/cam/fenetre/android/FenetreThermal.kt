@@ -12,14 +12,17 @@ object FenetreThermal {
         val batteryTemperatureCelsius = batteryTemperatureCelsius(context)
         val thermalStatus = androidThermalStatus(context)
         val thresholdCelsius = settings.cooldownBatteryTemperatureCelsius()
+        val thermalStatusThreshold = settings.cooldownThermalStatusThreshold()
         val enabled = settings.cooldownEnabled()
         val hotBattery = batteryTemperatureCelsius?.let { it >= thresholdCelsius } ?: false
-        val severeThermal = thermalStatus?.let { it >= THERMAL_STATUS_SEVERE } ?: false
+        val severeThermal = thermalStatusThreshold.value > 0 &&
+            (thermalStatus?.let { it >= thermalStatusThreshold.value } ?: false)
         return FenetreThermalStatus(
             enabled = enabled,
             paused = enabled && (hotBattery || severeThermal),
             batteryTemperatureCelsius = batteryTemperatureCelsius,
             thresholdCelsius = thresholdCelsius,
+            thermalStatusThreshold = thermalStatusThreshold.value,
             androidThermalStatus = thermalStatus,
         )
     }
@@ -50,8 +53,6 @@ object FenetreThermal {
             null
         }
     }
-
-    private const val THERMAL_STATUS_SEVERE = 3
 }
 
 data class FenetreThermalStatus(
@@ -59,5 +60,6 @@ data class FenetreThermalStatus(
     val paused: Boolean,
     val batteryTemperatureCelsius: Double?,
     val thresholdCelsius: Double,
+    val thermalStatusThreshold: Int,
     val androidThermalStatus: Int?,
 )

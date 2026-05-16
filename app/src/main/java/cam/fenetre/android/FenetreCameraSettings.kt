@@ -20,6 +20,15 @@ enum class DailyTimelapseEncoderMode(val label: String, val fileExtension: Strin
     VP9_HIGH_QUALITY("VP9 high quality", "webm"),
 }
 
+enum class ThermalStatusThreshold(val value: Int, val label: String) {
+    MANUAL(0, "Manual temperature only"),
+    LIGHT(1, "Light (1)"),
+    MODERATE(2, "Moderate (2)"),
+    SEVERE(3, "Severe (3)"),
+    CRITICAL(4, "Critical (4)"),
+    EMERGENCY(5, "Emergency (5)"),
+}
+
 class FenetreCameraSettings(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = context.getSharedPreferences("fenetre_camera", Context.MODE_PRIVATE)
@@ -177,6 +186,15 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit()
             .putFloat(KEY_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS, value.coerceIn(30.0, 70.0).toFloat())
             .apply()
+    }
+
+    fun cooldownThermalStatusThreshold(): ThermalStatusThreshold {
+        val value = preferences.getInt(KEY_COOLDOWN_THERMAL_STATUS_THRESHOLD, DEFAULT_COOLDOWN_THERMAL_STATUS_THRESHOLD)
+        return ThermalStatusThreshold.entries.firstOrNull { it.value == value } ?: ThermalStatusThreshold.SEVERE
+    }
+
+    fun setCooldownThermalStatusThreshold(value: ThermalStatusThreshold) {
+        preferences.edit().putInt(KEY_COOLDOWN_THERMAL_STATUS_THRESHOLD, value.value).apply()
     }
 
     fun storageManagementEnabled(): Boolean = preferences.getBoolean(
@@ -415,6 +433,7 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_FFMPEG_EXECUTABLE_PATH = "ffmpeg_executable_path"
         private const val KEY_COOLDOWN_ENABLED = "cooldown_enabled"
         private const val KEY_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = "cooldown_battery_temperature_celsius"
+        private const val KEY_COOLDOWN_THERMAL_STATUS_THRESHOLD = "cooldown_thermal_status_threshold"
         private const val KEY_STORAGE_MANAGEMENT_ENABLED = "storage_management_enabled"
         private const val KEY_STORAGE_MANAGEMENT_DRY_RUN = "storage_management_dry_run"
         private const val KEY_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS = "storage_management_check_interval_seconds"
@@ -451,6 +470,7 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_DAILY_VP9_BITRATE_MEGABITS = 7.0
         private const val DEFAULT_COOLDOWN_ENABLED = true
         private const val DEFAULT_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = 45.0
+        private const val DEFAULT_COOLDOWN_THERMAL_STATUS_THRESHOLD = 3
         private const val DEFAULT_STORAGE_MANAGEMENT_ENABLED = false
         private const val DEFAULT_STORAGE_MANAGEMENT_DRY_RUN = true
         private const val DEFAULT_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS = 300

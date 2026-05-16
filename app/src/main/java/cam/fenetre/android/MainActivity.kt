@@ -10,9 +10,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -20,6 +24,7 @@ import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,10 +33,23 @@ import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private lateinit var statusText: TextView
+    private lateinit var serviceStateText: TextView
+    private lateinit var captureStateText: TextView
+    private lateinit var latestCaptureAgeText: TextView
+    private lateinit var thermalStateText: TextView
+    private lateinit var storageStateText: TextView
+    private lateinit var notificationStateText: TextView
     private lateinit var storage: FenetreStorage
     private lateinit var cameraSettings: FenetreCameraSettings
     private lateinit var latitudeInput: EditText
     private lateinit var longitudeInput: EditText
+    private val stateHandler = Handler(Looper.getMainLooper())
+    private val stateRefreshRunnable = object : Runnable {
+        override fun run() {
+            updateStatePanel()
+            stateHandler.postDelayed(this, STATE_REFRESH_INTERVAL_MS)
+        }
+    }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -59,6 +77,18 @@ class MainActivity : ComponentActivity() {
         updateStatus(statusSummary())
     }
 
+    override fun onResume() {
+        super.onResume()
+        updateStatePanel()
+        stateHandler.removeCallbacks(stateRefreshRunnable)
+        stateHandler.postDelayed(stateRefreshRunnable, STATE_REFRESH_INTERVAL_MS)
+    }
+
+    override fun onPause() {
+        stateHandler.removeCallbacks(stateRefreshRunnable)
+        super.onPause()
+    }
+
     private fun buildContentView(): View {
         statusText = TextView(this).apply {
             textSize = 15f
@@ -82,6 +112,7 @@ class MainActivity : ComponentActivity() {
             setTextColor(0xff5f6b7a.toInt())
             setPadding(0, 4, 0, 24)
         })
+        content.addView(statePanel())
 
         content.addView(sectionTitle("Capture"))
         content.addView(actionGrid())
@@ -156,7 +187,8 @@ class MainActivity : ComponentActivity() {
         ) {
             it.toDoubleOrNull()?.let(cameraSettings::setCooldownBatteryTemperatureCelsius)
         })
-        content.addView(helpText("When enabled, capture and timelapse work pause while the battery is at or above this temperature."))
+        content.addView(thermalStatusThresholdSpinner())
+        content.addView(helpText("When enabled, capture and timelapse work pause while the battery is at or above this temperature. Pick a thermal state to also pause when Android reports that state or higher."))
 
         content.addView(sectionTitle("Storage management"))
         content.addView(settingCheckBox("Storage management", cameraSettings.storageManagementEnabled()) {
@@ -355,6 +387,121 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun statePanel(): LinearLayout {
+        serviceStateText = stateValueText()
+        captureStateText = stateValueText()
+        latestCaptureAgeText = stateValueText()
+        thermalStateText = stateValueText()
+        storageStateText = stateValueText()
+        notificationStateText = stateValueText()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(18, 16, 18, 16)
+            setBackgroundColor(0xffffffff.toInt())
+            addView(TextView(this@MainActivity).apply {
+                text = "App state"
+                textSize = 18f
+                setTextColor(0xff111827.toInt())
+                setPadding(0, 0, 0, 8)
+            })
+            addView(stateRow("Service", serviceStateText))
+            addView(stateRow("Capture", captureStateText))
+            addView(stateRow("Latest capture", latestCaptureAgeText))
+            addView(stateRow("Thermal", thermalStateText))
+            addView(stateRow("Storage", storageStateText))
+            addView(stateRow("Last update", notificationStateText))
+        }
+    }
+
+    private fun stateRow(label: String, value: TextView): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 4, 0, 4)
+            addView(TextView(this@MainActivity).apply {
+                text = label
+                textSize = 14f
+                setTextColor(0xff6b7280.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.75f)
+            })
+            addView(value)
+        }
+    }
+
+    private fun stateValueText(): TextView {
+        return TextView(this).apply {
+            textSize = 15f
+            setTextColor(0xff111827.toInt())
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+    }
+
+    private fun updateStatePanel() {
+        if (!::serviceStateText.isInitialized) {
+            return
+        }
+        val snapshot = FenetreCaptureService.runtimeSnapshot()
+        val thermal = FenetreThermal.status(this, cameraSettings)
+        val battery = FenetreThermal.batteryStatus(this)
+        serviceStateText.text = if (snapshot.running) "Running" else "Stopped"
+        captureStateText.text = when {
+            thermal.paused -> "Paused for cooldown"
+            snapshot.captureInProgress -> "In progress"
+            snapshot.running -> "Idle"
+            else -> "Not started"
+        }
+        latestCaptureAgeText.text = latestCaptureAgeTextValue()
+        thermalStateText.text = thermalStateTextValue(thermal, battery.second)
+        storageStateText.text = storageStateTextValue()
+        notificationStateText.text = snapshot.lastNotification
+    }
+
+    private fun latestCaptureAgeTextValue(): String {
+        val metadata = storage.metadataFile()
+        val capturedAtMs = if (metadata.exists()) {
+            Regex(""""captured_at_ms"\s*:\s*(\d+)""")
+                .find(metadata.readText())
+                ?.groupValues
+                ?.get(1)
+                ?.toLongOrNull()
+        } else {
+            null
+        }
+        return capturedAtMs?.let { "${formatDurationSeconds(maxOf(0L, (System.currentTimeMillis() - it) / 1000L))} ago" }
+            ?: "No capture yet"
+    }
+
+    private fun thermalStateTextValue(thermal: FenetreThermalStatus, batteryTemperatureCelsius: Double?): String {
+        val temperature = batteryTemperatureCelsius?.let { String.format(Locale.US, "%.1fC", it) } ?: "temp n/a"
+        val androidStatus = thermal.androidThermalStatus?.toString() ?: "n/a"
+        val threshold = if (thermal.thermalStatusThreshold > 0) {
+            "state >= ${thermal.thermalStatusThreshold}"
+        } else {
+            "manual"
+        }
+        return "$temperature, Android $androidStatus, $threshold"
+    }
+
+    private fun storageStateTextValue(): String {
+        val root = storage.rootDir()
+        val usedBytes = root.totalSpace - root.freeSpace
+        return "${formatBytes(usedBytes)} used, ${formatBytes(root.freeSpace)} free"
+    }
+
+    private fun formatDurationSeconds(seconds: Long): String {
+        return when {
+            seconds < 60 -> "${seconds}s"
+            seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
+            else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
+        }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        val gb = bytes / 1_000_000_000.0
+        return String.format(Locale.US, "%.1f GB", gb)
+    }
+
     private fun sectionTitle(title: String): TextView {
         return TextView(this).apply {
             text = title
@@ -448,6 +595,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun thermalStatusThresholdSpinner(): LinearLayout {
+        val values = ThermalStatusThreshold.entries
+        val spinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                values.map { it.label },
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            setSelection(values.indexOf(cameraSettings.cooldownThermalStatusThreshold()).coerceAtLeast(0), false)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    cameraSettings.setCooldownThermalStatusThreshold(values[position])
+                    updateStatus("${settingsSummary()}; saved Thermal state threshold")
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 4, 0, 4)
+            addView(TextView(this@MainActivity).apply {
+                text = "Thermal state threshold"
+                textSize = 15f
+                setTextColor(0xff374151.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.75f)
+            })
+            addView(spinner)
+        }
+    }
+
     private fun decimalInputType(): Int {
         return InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
     }
@@ -475,7 +657,7 @@ class MainActivity : ComponentActivity() {
             ""
         }
         val cooldown = if (cameraSettings.cooldownEnabled()) {
-            "; cooldown ${cameraSettings.cooldownBatteryTemperatureCelsius()}C"
+            "; cooldown ${cameraSettings.cooldownBatteryTemperatureCelsius()}C/${cameraSettings.cooldownThermalStatusThreshold().label}"
         } else {
             ""
         }
@@ -597,5 +779,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val SERVICE_RESTART_DELAY_MS = 500L
+        private const val STATE_REFRESH_INTERVAL_MS = 5_000L
     }
 }
