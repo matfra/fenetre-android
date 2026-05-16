@@ -21,6 +21,8 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ZoomState
+import androidx.camera.extensions.ExtensionMode
+import androidx.camera.extensions.ExtensionsManager
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -30,6 +32,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import kotlin.math.pow
 
 class FenetreCaptureService : LifecycleService() {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -41,6 +44,7 @@ class FenetreCaptureService : LifecycleService() {
     private lateinit var storageManager: FenetreStorageManager
     private lateinit var overlays: FenetreOverlays
     private lateinit var sunSchedule: FenetreSunSchedule
+    private var extensionsManager: ExtensionsManager? = null
     private var webServer: FenetreWebServer? = null
     private var adminServer: FenetreAdminServer? = null
     private var imageCapture: ImageCapture? = null
@@ -170,6 +174,9 @@ class FenetreCaptureService : LifecycleService() {
                     rotationDegrees = rotationDegrees,
                     lastNotification = lastNotification,
                     thermalPaused = thermalStatus().paused,
+                    manualExposureSettings = manualExposureSettings,
+                    activeNightCaptureStrategy = activeNightCaptureStrategy(),
+                    cameraXNightExtensionAvailable = cameraXNightExtensionAvailable(),
                     storageManagement = storageManager.lastStatus(),
                 )
             }).also { it.start() }
@@ -181,6 +188,7 @@ class FenetreCaptureService : LifecycleService() {
         providerFuture.addListener(
             {
                 val provider = providerFuture.get()
+                ensureExtensionsManager(provider)
                 lensMode = cameraSettings.lensMode()
                 rotationDegrees = cameraSettings.rotationDegrees()
                 exposureMode = cameraSettings.exposureMode()
@@ -188,22 +196,41 @@ class FenetreCaptureService : LifecycleService() {
                 if (exposureMode != ExposureMode.AUTO) {
                     manualExposureSettings = null
                 }
+                val activeNightStrategy = activeNightCaptureStrategy()
+                if (activeNightStrategy != NightCaptureStrategy.MANUAL_ADAPTIVE) {
+                    manualExposureSettings = null
+                }
                 val capture = buildImageCapture(captureMode)
 
                 clearCaptureInProgress()
                 provider.unbindAll()
-                val camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, capture)
+                val cameraSelector = cameraSelectorFor(activeNightStrategy)
+                val camera = provider.bindToLifecycle(this, cameraSelector, capture)
                 imageCapture = capture
-                val zoomState = camera.cameraInfo.zoomState
-                if (zoomState.value == null) {
-                    zoomState.observe(this) { state -> applyLensMode(state, camera.cameraControl) }
-                } else {
-                    applyLensMode(zoomState.value, camera.cameraControl)
+                if (activeNightStrategy != NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION) {
+                    val zoomState = camera.cameraInfo.zoomState
+                    if (zoomState.value == null) {
+                        zoomState.observe(this) { state -> applyLensMode(state, camera.cameraControl) }
+                    } else {
+                        applyLensMode(zoomState.value, camera.cameraControl)
+                    }
                 }
                 scheduleNextCapture(delayMs = scheduleDelayMs)
             },
             ContextCompat.getMainExecutor(this)
         )
+    }
+
+    private fun ensureExtensionsManager(provider: ProcessCameraProvider) {
+        if (extensionsManager != null) {
+            return
+        }
+        extensionsManager = try {
+            ExtensionsManager.getInstanceAsync(this, provider).get()
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to initialize CameraX extensions", exception)
+            null
+        }
     }
 
     private fun buildImageCapture(mode: ExposureMode): ImageCapture {
@@ -220,6 +247,22 @@ class FenetreCaptureService : LifecycleService() {
             CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
             CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF
         )
+        applyFocusOptions(extender)
+        if (mode == ExposureMode.AUTO && activeNightCaptureStrategy() == NightCaptureStrategy.CAMERA2_NIGHT_SCENE) {
+            extender.setCaptureRequestOption(
+                CaptureRequest.CONTROL_MODE,
+                CaptureRequest.CONTROL_MODE_USE_SCENE_MODE
+            )
+            extender.setCaptureRequestOption(
+                CaptureRequest.CONTROL_SCENE_MODE,
+                CaptureRequest.CONTROL_SCENE_MODE_NIGHT
+            )
+            extender.setCaptureRequestOption(
+                CaptureRequest.CONTROL_CAPTURE_INTENT,
+                CaptureRequest.CONTROL_CAPTURE_INTENT_STILL_CAPTURE
+            )
+            return builder.build()
+        }
         if (mode == ExposureMode.AUTO && manualExposureSettings != null) {
             val settings = manualExposureSettings ?: return builder.build()
             extender.setCaptureRequestOption(
@@ -230,15 +273,39 @@ class FenetreCaptureService : LifecycleService() {
                 CaptureRequest.CONTROL_AWB_MODE,
                 CaptureRequest.CONTROL_AWB_MODE_AUTO
             )
-            extender.setCaptureRequestOption(
-                CaptureRequest.CONTROL_AF_MODE,
-                CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
-            )
             extender.setCaptureRequestOption(CaptureRequest.SENSOR_EXPOSURE_TIME, settings.exposureTimeNs)
             extender.setCaptureRequestOption(CaptureRequest.SENSOR_FRAME_DURATION, settings.frameDurationNs)
             extender.setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, settings.iso)
         }
         return builder.build()
+    }
+
+    private fun applyFocusOptions(extender: Camera2Interop.Extender<ImageCapture>) {
+        if (cameraSettings.focusInfinityEnabled()) {
+            extender.setCaptureRequestOption(
+                CaptureRequest.CONTROL_AF_MODE,
+                CaptureRequest.CONTROL_AF_MODE_OFF
+            )
+            extender.setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, INFINITY_FOCUS_DIOPTERS)
+        } else {
+            extender.setCaptureRequestOption(
+                CaptureRequest.CONTROL_AF_MODE,
+                CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+            )
+        }
+    }
+
+    private fun cameraSelectorFor(strategy: NightCaptureStrategy): CameraSelector {
+        if (strategy != NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION) {
+            return CameraSelector.DEFAULT_BACK_CAMERA
+        }
+        val manager = extensionsManager ?: return CameraSelector.DEFAULT_BACK_CAMERA
+        return try {
+            manager.getExtensionEnabledCameraSelector(CameraSelector.DEFAULT_BACK_CAMERA, ExtensionMode.NIGHT)
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to enable CameraX night extension", exception)
+            CameraSelector.DEFAULT_BACK_CAMERA
+        }
     }
 
     private fun applyLensMode(zoomState: ZoomState?, cameraControl: androidx.camera.core.CameraControl) {
@@ -360,6 +427,9 @@ class FenetreCaptureService : LifecycleService() {
             rotationDegrees,
             exposureMode,
             captureMode,
+            cameraSettings.nightCaptureStrategy(),
+            activeNightCaptureStrategy(),
+            cameraSettings.focusInfinityEnabled(),
             manualExposureSettings,
             exposureComposite,
             imageBrightness,
@@ -418,8 +488,12 @@ class FenetreCaptureService : LifecycleService() {
         if (exposureMode != ExposureMode.AUTO) {
             return null
         }
-        val currentIso = captureExif.iso ?: return manualExposureSettings
-        val currentExposureNs = captureExif.exposureTimeSeconds
+        if (activeNightCaptureStrategy() != NightCaptureStrategy.MANUAL_ADAPTIVE) {
+            return null
+        }
+        val requestedSettings = manualExposureSettings
+        val currentIso = requestedSettings?.iso ?: captureExif.iso ?: return manualExposureSettings
+        val currentExposureNs = requestedSettings?.exposureTimeNs ?: captureExif.exposureTimeSeconds
             ?.let { (it * 1_000_000_000.0).roundToLong() }
             ?: return manualExposureSettings
         if (currentExposureNs <= 0L) {
@@ -438,7 +512,9 @@ class FenetreCaptureService : LifecycleService() {
         val maxIso = sensitivityRange?.upper ?: MAX_MANUAL_ISO
         val isoCap = cameraSettings.lowNoiseIso().coerceIn(minIso, maxIso)
         val brightnessFactor = exposureAdjustmentFactor(imageBrightness)
-        val desiredComposite = currentIso.toDouble() * currentExposureNs.toDouble() * brightnessFactor
+        val desiredComposite = currentIso.toDouble() *
+            currentExposureNs.toDouble() *
+            brightnessFactor
         val exposureAtIsoCap = (desiredComposite / isoCap.toDouble()).roundToLong()
         val exposureNs: Long
         val iso: Int
@@ -465,11 +541,53 @@ class FenetreCaptureService : LifecycleService() {
         if (brightness <= 0.0) {
             return MAX_EXPOSURE_ADJUSTMENT_FACTOR
         }
-        val rawFactor = TARGET_LUMA / brightness
+        val rawFactor = targetLuma() / brightness
         if (rawFactor in (1.0 - EXPOSURE_DEADBAND)..(1.0 + EXPOSURE_DEADBAND)) {
             return 1.0
         }
         return rawFactor.coerceIn(MIN_EXPOSURE_ADJUSTMENT_FACTOR, MAX_EXPOSURE_ADJUSTMENT_FACTOR)
+    }
+
+    private fun targetLuma(): Double {
+        if (
+            !sunSchedule.isNightExposureBoostWindow() ||
+            activeNightCaptureStrategy() != NightCaptureStrategy.MANUAL_ADAPTIVE
+        ) {
+            return TARGET_LUMA
+        }
+        return (TARGET_LUMA * 2.0.pow(cameraSettings.nightExposureBoostStops()))
+            .coerceAtMost(NIGHT_TARGET_LUMA_CAP)
+    }
+
+    private fun activeNightCaptureStrategy(): NightCaptureStrategy {
+        if (!sunSchedule.isNightExposureBoostWindow()) {
+            return NightCaptureStrategy.MANUAL_ADAPTIVE
+        }
+        val strategy = cameraSettings.nightCaptureStrategy()
+        if (strategy == NightCaptureStrategy.CAMERA2_NIGHT_SCENE && !camera2NightSceneAvailable()) {
+            return NightCaptureStrategy.MANUAL_ADAPTIVE
+        }
+        if (strategy == NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION && !cameraXNightExtensionAvailable()) {
+            return NightCaptureStrategy.MANUAL_ADAPTIVE
+        }
+        return strategy
+    }
+
+    private fun camera2NightSceneAvailable(): Boolean {
+        val modes = backCameraCharacteristics()
+            ?.get(CameraCharacteristics.CONTROL_AVAILABLE_SCENE_MODES)
+            ?: return false
+        return modes.contains(CaptureRequest.CONTROL_SCENE_MODE_NIGHT)
+    }
+
+    private fun cameraXNightExtensionAvailable(): Boolean {
+        val manager = extensionsManager ?: return false
+        return try {
+            manager.isExtensionAvailable(CameraSelector.DEFAULT_BACK_CAMERA, ExtensionMode.NIGHT)
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to check CameraX night extension", exception)
+            false
+        }
     }
 
     private fun backCameraCharacteristics(): CameraCharacteristics? {
@@ -574,6 +692,8 @@ class FenetreCaptureService : LifecycleService() {
         private const val CAPTURE_TIMEOUT_PADDING_MS = 15_000L
         private const val COOLDOWN_CHECK_INTERVAL_MS = 60_000L
         private const val TARGET_LUMA = 0.45
+        private const val NIGHT_TARGET_LUMA_CAP = 0.75
+        private const val INFINITY_FOCUS_DIOPTERS = 0.0f
         private const val EXPOSURE_DEADBAND = 0.08
         private const val MIN_EXPOSURE_ADJUSTMENT_FACTOR = 0.8
         private const val MAX_EXPOSURE_ADJUSTMENT_FACTOR = 1.25
@@ -588,6 +708,7 @@ data class ManualExposureSettings(
     val iso: Int,
 ) {
     fun exposureTimeSeconds(): Double = exposureTimeNs / 1_000_000_000.0
+    fun frameDurationSeconds(): Double = frameDurationNs / 1_000_000_000.0
 }
 
 data class FenetreServiceSnapshot(

@@ -215,7 +215,6 @@ class FenetreWebServer(
                 <section class="hud status" aria-label="Camera status">
                   <span id="lens">Lens</span>
                   <span id="mode">Mode</span>
-                  <span id="rotation">Rotation</span>
                   <span id="iso">ISO</span>
                   <span id="exposure">Exposure</span>
                   <span id="brightness">Brightness</span>
@@ -228,7 +227,6 @@ class FenetreWebServer(
                 const captureTime = document.getElementById('captureTime');
                 const lens = document.getElementById('lens');
                 const mode = document.getElementById('mode');
-                const rotation = document.getElementById('rotation');
                 const iso = document.getElementById('iso');
                 const exposure = document.getElementById('exposure');
                 const brightness = document.getElementById('brightness');
@@ -267,6 +265,42 @@ class FenetreWebServer(
                   return date.toISOString().slice(0, 10);
                 }
 
+                function formatExposure(seconds) {
+                  if (seconds == null || !Number.isFinite(Number(seconds)) || Number(seconds) <= 0) {
+                    return null;
+                  }
+                  const exposureSeconds = Number(seconds);
+                  if (exposureSeconds >= 1) {
+                    return exposureSeconds.toFixed(1).replace(/\.0$/, '') + 's';
+                  }
+                  return '1/' + Math.round(1 / exposureSeconds);
+                }
+
+                function exposureLabel(metadata) {
+                  const requested = formatExposure(metadata.requested_exposure_time);
+                  const exif = metadata.shutter_speed || formatExposure(metadata.exposure_time);
+                  if (requested && exif && requested !== exif) {
+                    return requested + ' requested / ' + exif + ' EXIF';
+                  }
+                  return requested || exif || 'Exposure n/a';
+                }
+
+                function modeLabel(metadata) {
+                  const strategy = metadata.night_capture_strategy_active || metadata.night_capture_strategy;
+                  if (strategy === 'manual_adaptive') {
+                    return 'Manual adaptive';
+                  }
+                  if (strategy === 'camerax_night_extension') {
+                    return 'CameraX night';
+                  }
+                  if (strategy === 'camera2_night_scene') {
+                    return 'Camera2 night';
+                  }
+                  const exposureMode = (metadata.exposure_mode || 'auto').replace('_', ' ');
+                  const captureMode = (metadata.capture_mode || '').replace('_', ' ');
+                  return captureMode && captureMode !== exposureMode ? exposureMode + ' / ' + captureMode : exposureMode;
+                }
+
                 async function refreshCamera() {
                   const now = Date.now();
                   image.src = '/photos/' + cameraName + '/latest.jpg?t=' + now;
@@ -283,10 +317,9 @@ class FenetreWebServer(
                       setOptionalLink(dailyLink, '/photos/' + cameraName + '/' + yesterday + '/' + yesterday + '.' + dailyExtension);
                     }
                     lens.textContent = (metadata.lens_mode || 'camera').replace('_', ' ');
-                    mode.textContent = (metadata.exposure_mode || 'auto') + ' / ' + (metadata.capture_mode || 'day');
-                    rotation.textContent = 'rotate ' + (metadata.rotation_degrees ?? 0);
+                    mode.textContent = modeLabel(metadata);
                     iso.textContent = metadata.iso ? 'ISO ' + metadata.iso : 'ISO n/a';
-                    exposure.textContent = metadata.shutter_speed || metadata.exposure_time || 'Exposure n/a';
+                    exposure.textContent = exposureLabel(metadata);
                     brightness.textContent = metadata.image_brightness == null ? 'Brightness n/a' : 'Brightness ' + Math.round(metadata.image_brightness * 100) + '%';
                     whiteBalance.textContent = metadata.white_balance ? 'WB ' + metadata.white_balance : 'WB n/a';
                     refresh.textContent = new Date().toLocaleTimeString();

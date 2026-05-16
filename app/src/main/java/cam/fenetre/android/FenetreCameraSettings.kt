@@ -29,6 +29,12 @@ enum class ThermalStatusThreshold(val value: Int, val label: String) {
     EMERGENCY(5, "Emergency (5)"),
 }
 
+enum class NightCaptureStrategy(val label: String) {
+    MANUAL_ADAPTIVE("Manual adaptive exposure"),
+    CAMERA2_NIGHT_SCENE("Camera2 night scene mode"),
+    CAMERAX_NIGHT_EXTENSION("CameraX night extension"),
+}
+
 class FenetreCameraSettings(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = context.getSharedPreferences("fenetre_camera", Context.MODE_PRIVATE)
@@ -314,6 +320,42 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putInt(KEY_SUNSET_OFFSET_END_MINUTES, value.coerceIn(0, 360)).apply()
     }
 
+    fun nightExposureBoostStops(): Double = preferences.getFloat(
+        KEY_NIGHT_EXPOSURE_BOOST_STOPS,
+        DEFAULT_NIGHT_EXPOSURE_BOOST_STOPS.toFloat(),
+    ).toDouble().coerceIn(0.0, 4.0)
+
+    fun setNightExposureBoostStops(value: Double) {
+        preferences.edit().putFloat(KEY_NIGHT_EXPOSURE_BOOST_STOPS, value.coerceIn(0.0, 4.0).toFloat()).apply()
+    }
+
+    fun nightExposureBoostTwilightBufferMinutes(): Int = preferences.getInt(
+        KEY_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES,
+        DEFAULT_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES,
+    ).coerceIn(0, 360)
+
+    fun setNightExposureBoostTwilightBufferMinutes(value: Int) {
+        preferences.edit().putInt(KEY_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES, value.coerceIn(0, 360)).apply()
+    }
+
+    fun nightCaptureStrategy(): NightCaptureStrategy {
+        val name = preferences.getString(KEY_NIGHT_CAPTURE_STRATEGY, NightCaptureStrategy.MANUAL_ADAPTIVE.name)
+        return NightCaptureStrategy.entries.firstOrNull { it.name == name } ?: NightCaptureStrategy.MANUAL_ADAPTIVE
+    }
+
+    fun setNightCaptureStrategy(value: NightCaptureStrategy) {
+        preferences.edit().putString(KEY_NIGHT_CAPTURE_STRATEGY, value.name).apply()
+    }
+
+    fun focusInfinityEnabled(): Boolean = preferences.getBoolean(
+        KEY_FOCUS_INFINITY_ENABLED,
+        DEFAULT_FOCUS_INFINITY_ENABLED,
+    )
+
+    fun setFocusInfinityEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_FOCUS_INFINITY_ENABLED, value).apply()
+    }
+
     fun lowNoiseIso(): Int = preferences.getInt(KEY_LOW_NOISE_ISO, DEFAULT_LOW_NOISE_ISO).coerceIn(25, 6400)
 
     fun setLowNoiseIso(value: Int) {
@@ -447,6 +489,10 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_SUNRISE_OFFSET_END_MINUTES = "sunrise_offset_end_minutes"
         private const val KEY_SUNSET_OFFSET_START_MINUTES = "sunset_offset_start_minutes"
         private const val KEY_SUNSET_OFFSET_END_MINUTES = "sunset_offset_end_minutes"
+        private const val KEY_NIGHT_EXPOSURE_BOOST_STOPS = "night_exposure_boost_stops"
+        private const val KEY_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES = "night_exposure_boost_twilight_buffer_minutes"
+        private const val KEY_NIGHT_CAPTURE_STRATEGY = "night_capture_strategy"
+        private const val KEY_FOCUS_INFINITY_ENABLED = "focus_infinity_enabled"
         private const val KEY_LOW_NOISE_ISO = "low_noise_iso"
         private const val KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = "ultra_wide_night_exposure_seconds"
         private const val KEY_WIDE_NIGHT_EXPOSURE_SECONDS = "wide_night_exposure_seconds"
@@ -484,6 +530,9 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_SUNRISE_OFFSET_END_MINUTES = 30
         private const val DEFAULT_SUNSET_OFFSET_START_MINUTES = 30
         private const val DEFAULT_SUNSET_OFFSET_END_MINUTES = 60
+        private const val DEFAULT_NIGHT_EXPOSURE_BOOST_STOPS = 1.0
+        private const val DEFAULT_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES = 90
+        private const val DEFAULT_FOCUS_INFINITY_ENABLED = true
         private const val DEFAULT_LOW_NOISE_ISO = 100
         private const val DEFAULT_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = 25.0
         private const val DEFAULT_WIDE_NIGHT_EXPOSURE_SECONDS = 15.0

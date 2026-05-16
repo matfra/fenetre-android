@@ -27,6 +27,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.12.0-alpha08")
     implementation("androidx.camera:camera-camera2:$cameraXVersion")
     implementation("androidx.camera:camera-core:$cameraXVersion")
+    implementation("androidx.camera:camera-extensions:$cameraXVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-service:2.10.0")

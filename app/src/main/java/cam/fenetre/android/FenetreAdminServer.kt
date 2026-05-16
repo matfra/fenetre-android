@@ -1,6 +1,9 @@
 package cam.fenetre.android
 
 import android.content.Context
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraMetadata
 import android.os.Build
 import android.os.Debug
 import android.os.SystemClock
@@ -112,6 +115,11 @@ class FenetreAdminServer(
         val fileStatus = fileStatus()
         val thermal = FenetreThermal.status(context, settings)
         val storageManagement = runtime.storageManagement
+        val camera2MaxExposureSeconds = logicalBackCameraMaxExposureSeconds()
+        val camera2NightSceneAvailable = camera2NightSceneAvailable()
+        val activeNightStrategy = runtime.activeNightCaptureStrategy
+        val manualNightBoostActive = sunSchedule.isNightExposureBoostWindow() &&
+            activeNightStrategy == NightCaptureStrategy.MANUAL_ADAPTIVE
         return """
             {
               "service": {
@@ -144,11 +152,27 @@ class FenetreAdminServer(
                 "sunrise_offset_end_minutes": ${settings.sunriseOffsetEndMinutes()},
                 "sunset_offset_start_minutes": ${settings.sunsetOffsetStartMinutes()},
                 "sunset_offset_end_minutes": ${settings.sunsetOffsetEndMinutes()},
+                "night_capture_strategy": ${jsonString(settings.nightCaptureStrategy().name.lowercase())},
+                "night_capture_strategy_active": ${jsonString(activeNightStrategy.name.lowercase())},
+                "camera2_night_scene_available": $camera2NightSceneAvailable,
+                "camerax_night_extension_available": ${runtime.cameraXNightExtensionAvailable},
+                "focus_infinity_enabled": ${settings.focusInfinityEnabled()},
+                "night_exposure_boost_stops": ${settings.nightExposureBoostStops()},
+                "night_exposure_boost_twilight_buffer_minutes": ${settings.nightExposureBoostTwilightBufferMinutes()},
+                "night_exposure_boost_active": $manualNightBoostActive,
                 "timestamp_overlay": ${settings.timestampOverlayEnabled()},
                 "sun_path_overlay": ${settings.sunPathOverlayEnabled()},
                 "overlay_timezone": ${jsonString(settings.overlayTimezone())},
                 "overlay_lat": ${settings.overlayLatitude()},
                 "overlay_lon": ${settings.overlayLongitude()}
+              },
+              "exposure": {
+                "configured_max_exposure_seconds": ${settings.maxExposureSeconds(runtime.lensMode)},
+                "camera2_logical_max_exposure_seconds": ${camera2MaxExposureSeconds ?: "null"},
+                "requested_exposure_time_seconds": ${runtime.manualExposureSettings?.exposureTimeSeconds() ?: "null"},
+                "requested_frame_duration_seconds": ${runtime.manualExposureSettings?.frameDurationSeconds() ?: "null"},
+                "requested_iso": ${runtime.manualExposureSettings?.iso ?: "null"},
+                "requested_focus_distance_diopters": ${if (settings.focusInfinityEnabled()) "0.0" else "null"}
               },
               "storage": {
                 "root": ${jsonString(rootDir.absolutePath)},
@@ -206,6 +230,10 @@ class FenetreAdminServer(
         val systemMetrics = systemMetrics()
         val now = System.currentTimeMillis()
         val ageSeconds = fileStatus.metadataCapturedAtMs?.let { maxOf(0L, (now - it) / 1000L) }
+        val camera2NightSceneAvailable = camera2NightSceneAvailable()
+        val activeNightStrategy = runtime.activeNightCaptureStrategy
+        val manualNightBoostActive = sunSchedule.isNightExposureBoostWindow() &&
+            activeNightStrategy == NightCaptureStrategy.MANUAL_ADAPTIVE
         val cameraLabels = """camera_name="${prometheusLabelValue(settings.cameraName())}""""
         val storageLabels = """device="android_app_data",fstype="app_data",mountpoint="${rootDir.absolutePath}""""
         val unameLabels = listOf(
@@ -294,6 +322,23 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_sunrise_sunset_fast_active Whether the current time is in a fast sunrise/sunset window.")
             appendLine("# TYPE fenetre_android_sunrise_sunset_fast_active gauge")
             appendLine("fenetre_android_sunrise_sunset_fast_active{$cameraLabels} ${if (sunSchedule.isSunriseSunsetWindow()) 1 else 0}")
+            appendLine("# HELP fenetre_android_night_exposure_boost_stops Configured night-only exposure boost in stops.")
+            appendLine("# TYPE fenetre_android_night_exposure_boost_stops gauge")
+            appendLine("fenetre_android_night_exposure_boost_stops{$cameraLabels} ${settings.nightExposureBoostStops()}")
+            appendLine("# HELP fenetre_android_night_exposure_boost_active Whether the night exposure boost window is active.")
+            appendLine("# TYPE fenetre_android_night_exposure_boost_active gauge")
+            appendLine("fenetre_android_night_exposure_boost_active{$cameraLabels} ${if (manualNightBoostActive) 1 else 0}")
+            appendLine("# HELP fenetre_android_camera2_night_scene_available Whether Camera2 advertises night scene mode.")
+            appendLine("# TYPE fenetre_android_camera2_night_scene_available gauge")
+            appendLine("fenetre_android_camera2_night_scene_available{$cameraLabels} ${if (camera2NightSceneAvailable) 1 else 0}")
+            appendLine("# HELP fenetre_android_camerax_night_extension_available Whether CameraX advertises the night extension.")
+            appendLine("# TYPE fenetre_android_camerax_night_extension_available gauge")
+            appendLine("fenetre_android_camerax_night_extension_available{$cameraLabels} ${if (runtime.cameraXNightExtensionAvailable) 1 else 0}")
+            appendLine("# HELP fenetre_android_night_capture_strategy_active Active night capture strategy.")
+            appendLine("# TYPE fenetre_android_night_capture_strategy_active gauge")
+            NightCaptureStrategy.entries.forEach { strategy ->
+                appendLine("""fenetre_android_night_capture_strategy_active{$cameraLabels,strategy="${prometheusLabelValue(strategy.name.lowercase())}"} ${if (activeNightStrategy == strategy) 1 else 0}""")
+            }
             appendLine("# HELP node_uname_info Labeled system information as provided by the uname system call.")
             appendLine("# TYPE node_uname_info gauge")
             appendLine("node_uname_info{$unameLabels} 1")
@@ -374,6 +419,7 @@ class FenetreAdminServer(
                   <dt>Capture</dt><dd>${if (runtime.captureInProgress) "in progress" else "idle"}</dd>
                   <dt>Thermal cooldown</dt><dd>${if (runtime.thermalPaused) "paused" else "normal"}</dd>
                   <dt>Lens</dt><dd>${htmlEscape(runtime.lensMode.label)}</dd>
+                  <dt>Focus</dt><dd>${if (settings.focusInfinityEnabled()) "Infinity" else "Continuous autofocus"}</dd>
                   <dt>Exposure</dt><dd>${htmlEscape(runtime.exposureMode.label)} / ${htmlEscape(runtime.captureMode.label)}</dd>
                   <dt>Latest age</dt><dd>$latestAge</dd>
                   <dt>Latest size</dt><dd>${fileStatus.latestImageBytes} bytes</dd>
@@ -408,6 +454,44 @@ class FenetreAdminServer(
             metadataModifiedMs = if (metadata.exists()) metadata.lastModified() else null,
             metadataCapturedAtMs = capturedAtMs,
         )
+    }
+
+    private fun logicalBackCameraMaxExposureSeconds(): Double? {
+        return try {
+            val cameraManager = context.getSystemService(CameraManager::class.java)
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+            } ?: return null
+            val range = cameraManager.getCameraCharacteristics(cameraId)
+                .get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+                ?: return null
+            range.upper / 1_000_000_000.0
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to read camera exposure range", exception)
+            null
+        }
+    }
+
+    private fun camera2NightSceneAvailable(): Boolean {
+        val modes = logicalBackCameraCharacteristics()
+            ?.get(CameraCharacteristics.CONTROL_AVAILABLE_SCENE_MODES)
+            ?: return false
+        return modes.contains(CameraMetadata.CONTROL_SCENE_MODE_NIGHT)
+    }
+
+    private fun logicalBackCameraCharacteristics(): CameraCharacteristics? {
+        return try {
+            val cameraManager = context.getSystemService(CameraManager::class.java)
+            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                cameraManager.getCameraCharacteristics(id)
+                    .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+            } ?: return null
+            cameraManager.getCameraCharacteristics(cameraId)
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to read camera characteristics", exception)
+            null
+        }
     }
 
     private fun systemMetrics(): FenetreSystemMetrics {
@@ -641,6 +725,9 @@ data class FenetreRuntimeStatus(
     val rotationDegrees: Int,
     val lastNotification: String,
     val thermalPaused: Boolean,
+    val manualExposureSettings: ManualExposureSettings? = null,
+    val activeNightCaptureStrategy: NightCaptureStrategy = NightCaptureStrategy.MANUAL_ADAPTIVE,
+    val cameraXNightExtensionAvailable: Boolean = false,
     val storageManagement: StorageManagementStatus = StorageManagementStatus.empty(File(".")),
 )
 

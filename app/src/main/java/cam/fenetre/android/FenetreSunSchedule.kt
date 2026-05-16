@@ -22,22 +22,36 @@ class FenetreSunSchedule(private val settings: FenetreCameraSettings) {
         if (!settings.sunriseSunsetFastEnabled()) {
             return false
         }
+        val sunWindow = sunWindowFor(now) ?: return false
+        val sunriseStart = sunWindow.sunrise.minusMinutes(settings.sunriseOffsetStartMinutes().toLong())
+        val sunriseEnd = sunWindow.sunrise.plusMinutes(settings.sunriseOffsetEndMinutes().toLong())
+        val sunsetStart = sunWindow.sunset.minusMinutes(settings.sunsetOffsetStartMinutes().toLong())
+        val sunsetEnd = sunWindow.sunset.plusMinutes(settings.sunsetOffsetEndMinutes().toLong())
+        return now in sunriseStart..sunriseEnd || now in sunsetStart..sunsetEnd
+    }
+
+    fun isNightExposureBoostWindow(now: ZonedDateTime = now()): Boolean {
+        if (settings.nightExposureBoostStops() <= 0.0) {
+            return false
+        }
+        val sunWindow = sunWindowFor(now) ?: return false
+        val buffer = settings.nightExposureBoostTwilightBufferMinutes().toLong()
+        return now < sunWindow.sunrise.minusMinutes(buffer) || now > sunWindow.sunset.plusMinutes(buffer)
+    }
+
+    private fun now(): ZonedDateTime = ZonedDateTime.now(zoneIdOrDefault(settings.overlayTimezone()))
+
+    private fun sunWindowFor(now: ZonedDateTime): SunWindowDateTime? {
         val sunWindow = sunriseSunset(
             now.toLocalDate(),
             settings.overlayLatitude(),
             settings.overlayLongitude(),
             now.offset.totalSeconds / 3600.0,
-        ) ?: return false
+        ) ?: return null
         val sunrise = decimalHourToZonedDateTime(now.toLocalDate(), sunWindow.sunriseHour, now.zone)
         val sunset = decimalHourToZonedDateTime(now.toLocalDate(), sunWindow.sunsetHour, now.zone)
-        val sunriseStart = sunrise.minusMinutes(settings.sunriseOffsetStartMinutes().toLong())
-        val sunriseEnd = sunrise.plusMinutes(settings.sunriseOffsetEndMinutes().toLong())
-        val sunsetStart = sunset.minusMinutes(settings.sunsetOffsetStartMinutes().toLong())
-        val sunsetEnd = sunset.plusMinutes(settings.sunsetOffsetEndMinutes().toLong())
-        return now in sunriseStart..sunriseEnd || now in sunsetStart..sunsetEnd
+        return SunWindowDateTime(sunrise, sunset)
     }
-
-    private fun now(): ZonedDateTime = ZonedDateTime.now(zoneIdOrDefault(settings.overlayTimezone()))
 
     private fun sunriseSunset(date: LocalDate, latitude: Double, longitude: Double, utcOffsetHours: Double): SunWindow? {
         val dayOfYear = date.dayOfYear.toDouble()
@@ -83,5 +97,10 @@ class FenetreSunSchedule(private val settings: FenetreCameraSettings) {
     private data class SunWindow(
         val sunriseHour: Double,
         val sunsetHour: Double,
+    )
+
+    private data class SunWindowDateTime(
+        val sunrise: ZonedDateTime,
+        val sunset: ZonedDateTime,
     )
 }

@@ -119,6 +119,9 @@ class MainActivity : ComponentActivity() {
 
         content.addView(sectionTitle("Lens"))
         content.addView(lensGroup())
+        content.addView(settingCheckBox("Lock focus to infinity", cameraSettings.focusInfinityEnabled()) {
+            cameraSettings.setFocusInfinityEnabled(it)
+        })
 
         content.addView(sectionTitle("Exposure"))
         content.addView(exposureGroup())
@@ -237,6 +240,18 @@ class MainActivity : ComponentActivity() {
             it.toIntOrNull()?.let(cameraSettings::setSunsetOffsetEndMinutes)
         })
         content.addView(helpText("Fast capture uses the overlay timezone, latitude, and longitude. Defaults match the Python service windows."))
+        content.addView(nightCaptureStrategySpinner())
+        content.addView(settingEditText(
+            "Night exposure boost stops",
+            cameraSettings.nightExposureBoostStops().toString(),
+            decimalInputType(),
+        ) {
+            it.toDoubleOrNull()?.let(cameraSettings::setNightExposureBoostStops)
+        })
+        content.addView(settingEditText("Night boost twilight buffer minutes", cameraSettings.nightExposureBoostTwilightBufferMinutes().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setNightExposureBoostTwilightBufferMinutes)
+        })
+        content.addView(helpText("Night boost applies only after sunset plus this buffer and before sunrise minus this buffer. Default +2 stops means 4x target exposure at night."))
         content.addView(settingEditText("ISO cap", cameraSettings.lowNoiseIso().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setLowNoiseIso)
         })
@@ -595,6 +610,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun nightCaptureStrategySpinner(): LinearLayout {
+        val values = NightCaptureStrategy.entries
+        val spinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                values.map { it.label },
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            setSelection(values.indexOf(cameraSettings.nightCaptureStrategy()).coerceAtLeast(0), false)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    cameraSettings.setNightCaptureStrategy(values[position])
+                    updateStatus("${settingsSummary()}; saved Night capture strategy")
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 4, 0, 4)
+            addView(TextView(this@MainActivity).apply {
+                text = "Night capture strategy"
+                textSize = 15f
+                setTextColor(0xff374151.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.75f)
+            })
+            addView(spinner)
+        }
+    }
+
     private fun thermalStatusThresholdSpinner(): LinearLayout {
         val values = ThermalStatusThreshold.entries
         val spinner = Spinner(this).apply {
@@ -666,7 +716,12 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}$sunriseSunset$cooldown$storageManagement"
+        val focus = if (cameraSettings.focusInfinityEnabled()) {
+            "; focus infinity"
+        } else {
+            ""
+        }
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label} +${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$storageManagement"
     }
 
     private fun requestNeededPermissions() {
