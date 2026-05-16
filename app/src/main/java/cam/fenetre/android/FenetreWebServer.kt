@@ -180,6 +180,11 @@ class FenetreWebServer(
         val metadataVersion = if (metadata.exists()) metadata.lastModified().toString() else latestVersion
         val appTitle = settings.deploymentName()
         val dailyExtension = settings.dailyTimelapseEncoderMode().fileExtension
+        val canonicalWebsiteLink = if (settings.canonicalWebsiteLinkEnabled()) {
+            """<a href="https://fenetre.cam/">All cameras</a>"""
+        } else {
+            ""
+        }
         return """
             <!doctype html>
             <html lang="en">
@@ -204,6 +209,7 @@ class FenetreWebServer(
                     <a id="dailyLink" href="/photos/">Yesterday's timelapse</a>
                     <a href="/photos/$cameraName/daylight.html">Visual browser</a>
                     <a href="/photos/">Files</a>
+                    $canonicalWebsiteLink
                   </nav>
                 </header>
                 <section class="hud status" aria-label="Camera status">
@@ -532,14 +538,17 @@ class FenetreWebServer(
               min-height: 36px;
               display: inline-flex;
               align-items: center;
-              border: 1px solid rgba(255,255,255,.24);
-              background: rgba(5, 7, 10, .42);
+              border: 1px solid rgba(255,255,255,.22);
+              border-radius: 999px;
+              background: rgba(5, 7, 10, .58);
               backdrop-filter: blur(10px);
-              padding: 0 12px;
+              box-shadow: 0 6px 18px rgba(0,0,0,.18);
+              padding: 0 14px;
               font-size: 13px;
+              white-space: nowrap;
             }
             .topbar a:hover {
-              background: rgba(255,255,255,.16);
+              background: rgba(255,255,255,.18);
             }
             .topbar a.disabled {
               opacity: .46;
@@ -592,6 +601,10 @@ class FenetreWebServer(
               }
               .topbar nav {
                 justify-content: flex-start;
+              }
+              .topbar a, .status span {
+                min-height: 34px;
+                padding: 0 12px;
               }
               .status {
                 left: 16px;

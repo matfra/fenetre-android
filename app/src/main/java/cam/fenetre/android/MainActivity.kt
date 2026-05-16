@@ -112,6 +112,9 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Comparison URL", cameraSettings.comparisonUrl()) {
             cameraSettings.setComparisonUrl(it)
         })
+        content.addView(settingCheckBox("Show fenetre.cam link", cameraSettings.canonicalWebsiteLinkEnabled()) {
+            cameraSettings.setCanonicalWebsiteLinkEnabled(it)
+        })
 
         content.addView(sectionTitle("Web server"))
         content.addView(settingEditText("Local host", cameraSettings.webHost()) {

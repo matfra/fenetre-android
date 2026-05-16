@@ -94,6 +94,15 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putString(KEY_COMPARISON_URL, normalizeUrl(value, DEFAULT_COMPARISON_URL)).apply()
     }
 
+    fun canonicalWebsiteLinkEnabled(): Boolean = preferences.getBoolean(
+        KEY_CANONICAL_WEBSITE_LINK_ENABLED,
+        DEFAULT_CANONICAL_WEBSITE_LINK_ENABLED,
+    )
+
+    fun setCanonicalWebsiteLinkEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_CANONICAL_WEBSITE_LINK_ENABLED, value).apply()
+    }
+
     fun webHost(): String = cleanText(preferences.getString(KEY_WEB_HOST, DEFAULT_WEB_HOST), DEFAULT_WEB_HOST)
 
     fun setWebHost(value: String) {
@@ -396,6 +405,7 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_PUBLIC_BASE_URL = "public_base_url"
         private const val KEY_CAMERA_DESCRIPTION = "camera_description"
         private const val KEY_COMPARISON_URL = "comparison_url"
+        private const val KEY_CANONICAL_WEBSITE_LINK_ENABLED = "canonical_website_link_enabled"
         private const val KEY_WEB_HOST = "web_host"
         private const val KEY_WEB_PORT = "web_port"
         private const val KEY_ADMIN_PORT = "admin_port"
@@ -433,6 +443,7 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_PUBLIC_BASE_URL = "https://p6p.fenetre.cam/"
         private const val DEFAULT_CAMERA_DESCRIPTION = "Pixel 6 Pro Android camera"
         private const val DEFAULT_COMPARISON_URL = "https://dev.fenetre.cam/fullscreen.html?camera=gopro-hero-6"
+        private const val DEFAULT_CANONICAL_WEBSITE_LINK_ENABLED = true
         private const val DEFAULT_WEB_HOST = "192.168.8.242"
         private const val DEFAULT_WEB_PORT = 8888
         private const val DEFAULT_ADMIN_PORT = 8889
