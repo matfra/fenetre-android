@@ -88,6 +88,7 @@ class FenetreStorage(context: Context, private val settings: FenetreCameraSettin
         manualExposureSettings: ManualExposureSettings?,
         exposureComposite: Double?,
         imageBrightness: Double?,
+        vignetteCorrectionApplied: Boolean,
         captureExif: CaptureExif,
     ) {
         val cameraName = cameraName()
@@ -113,6 +114,11 @@ class FenetreStorage(context: Context, private val settings: FenetreCameraSettin
               "day_exposure_composite_threshold": ${settings.dayExposureCompositeThreshold()},
               "night_exposure_composite_threshold": ${settings.nightExposureCompositeThreshold()},
               "manual_night_target_luma": ${settings.manualNightTargetLuma()},
+              "vignette_correction_enabled": ${settings.vignetteCorrectionEnabled()},
+              "vignette_correction_applied": $vignetteCorrectionApplied,
+              "vignette_correction_strength": ${settings.vignetteCorrectionStrength()},
+              "vignette_correction_power": ${settings.vignetteCorrectionPower()},
+              "vignette_correction_radius": ${settings.vignetteCorrectionRadius()},
               "low_noise_iso": ${settings.lowNoiseIso()},
               "image_brightness": ${imageBrightness?.toString() ?: "null"},
               "iso": ${captureExif.iso?.toString() ?: "null"},

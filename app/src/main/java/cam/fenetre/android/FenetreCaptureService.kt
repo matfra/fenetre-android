@@ -44,6 +44,7 @@ class FenetreCaptureService : LifecycleService() {
     private lateinit var daylight: FenetreDaylight
     private lateinit var storageManager: FenetreStorageManager
     private lateinit var overlays: FenetreOverlays
+    private lateinit var vignetteCorrection: FenetreVignetteCorrection
     private lateinit var sunSchedule: FenetreSunSchedule
     private var extensionsManager: ExtensionsManager? = null
     private var webServer: FenetreWebServer? = null
@@ -73,6 +74,7 @@ class FenetreCaptureService : LifecycleService() {
         daylight = FenetreDaylight(storage)
         storageManager = FenetreStorageManager(storage, cameraSettings)
         overlays = FenetreOverlays(cameraSettings)
+        vignetteCorrection = FenetreVignetteCorrection(cameraSettings)
         sunSchedule = FenetreSunSchedule(cameraSettings)
         createNotificationChannel()
     }
@@ -461,6 +463,9 @@ class FenetreCaptureService : LifecycleService() {
         val exposureComposite = captureExif.exposureComposite()
         val imageBrightness = averageNormalizedLuma(photoFile)
         JpegOrientation.normalize(photoFile, rotationDegrees)
+        val vignetteCorrectionApplied = captureMode == ExposureMode.AUTO &&
+            activeNightCaptureStrategy() == NightCaptureStrategy.MANUAL_ADAPTIVE &&
+            vignetteCorrection.apply(photoFile)
         overlays.apply(photoFile)
         photoFile.copyTo(storage.latestFile(), overwrite = true)
         daylight.observe(photoFile)
@@ -476,6 +481,7 @@ class FenetreCaptureService : LifecycleService() {
             manualExposureSettings,
             exposureComposite,
             imageBrightness,
+            vignetteCorrectionApplied,
             captureExif,
         )
         if (!pauseForCooldownIfNeeded()) {
@@ -647,13 +653,13 @@ class FenetreCaptureService : LifecycleService() {
     private fun exposureAdjustmentFactor(imageBrightness: Double?): Double {
         val brightness = imageBrightness ?: return 1.0
         if (brightness <= 0.0) {
-            return MAX_EXPOSURE_ADJUSTMENT_FACTOR
+            return MAX_BRIGHTEN_EXPOSURE_ADJUSTMENT_FACTOR
         }
         val rawFactor = cameraSettings.manualNightTargetLuma() / brightness
         if (rawFactor in (1.0 - EXPOSURE_DEADBAND)..(1.0 + EXPOSURE_DEADBAND)) {
             return 1.0
         }
-        return rawFactor.coerceIn(MIN_EXPOSURE_ADJUSTMENT_FACTOR, MAX_EXPOSURE_ADJUSTMENT_FACTOR)
+        return rawFactor.coerceIn(MIN_DARKEN_EXPOSURE_ADJUSTMENT_FACTOR, MAX_BRIGHTEN_EXPOSURE_ADJUSTMENT_FACTOR)
     }
 
     private fun activeNightCaptureStrategy(): NightCaptureStrategy {
@@ -851,8 +857,8 @@ class FenetreCaptureService : LifecycleService() {
         private const val COOLDOWN_CHECK_INTERVAL_MS = 60_000L
         private const val INFINITY_FOCUS_DIOPTERS = 0.0f
         private const val EXPOSURE_DEADBAND = 0.08
-        private const val MIN_EXPOSURE_ADJUSTMENT_FACTOR = 0.8
-        private const val MAX_EXPOSURE_ADJUSTMENT_FACTOR = 1.25
+        private const val MIN_DARKEN_EXPOSURE_ADJUSTMENT_FACTOR = 0.25
+        private const val MAX_BRIGHTEN_EXPOSURE_ADJUSTMENT_FACTOR = 2.0
         private const val LUMA_SAMPLE_SIZE = 256
         private const val TAG = "FenetreCaptureService"
         private val SAMSUNG_SUPER_NIGHT_SHOT_MODE = CaptureRequest.Key(

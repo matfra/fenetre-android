@@ -380,6 +380,53 @@ class FenetreCameraSettings(context: Context) {
             .apply()
     }
 
+    fun vignetteCorrectionEnabled(): Boolean = preferences.getBoolean(
+        KEY_VIGNETTE_CORRECTION_ENABLED,
+        defaultVignetteCorrectionEnabled(),
+    )
+
+    fun setVignetteCorrectionEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_VIGNETTE_CORRECTION_ENABLED, value).apply()
+    }
+
+    fun vignetteCorrectionStrength(): Double = preferences.getFloat(
+        KEY_VIGNETTE_CORRECTION_STRENGTH,
+        DEFAULT_VIGNETTE_CORRECTION_STRENGTH.toFloat(),
+    ).toDouble().coerceIn(0.0, 8.0)
+
+    fun setVignetteCorrectionStrength(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_VIGNETTE_CORRECTION_STRENGTH, value.coerceIn(0.0, 8.0).toFloat())
+            .apply()
+    }
+
+    fun vignetteCorrectionPower(): Double = preferences.getFloat(
+        KEY_VIGNETTE_CORRECTION_POWER,
+        DEFAULT_VIGNETTE_CORRECTION_POWER.toFloat(),
+    ).toDouble().coerceIn(0.5, 4.0)
+
+    fun setVignetteCorrectionPower(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_VIGNETTE_CORRECTION_POWER, value.coerceIn(0.5, 4.0).toFloat())
+            .apply()
+    }
+
+    fun vignetteCorrectionRadius(): Double = preferences.getFloat(
+        KEY_VIGNETTE_CORRECTION_RADIUS,
+        DEFAULT_VIGNETTE_CORRECTION_RADIUS.toFloat(),
+    ).toDouble().coerceIn(0.1, 1.0)
+
+    fun setVignetteCorrectionRadius(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_VIGNETTE_CORRECTION_RADIUS, value.coerceIn(0.1, 1.0).toFloat())
+            .apply()
+    }
+
+    private fun defaultVignetteCorrectionEnabled(): Boolean {
+        return Build.MANUFACTURER.equals("google", ignoreCase = true) &&
+            Build.MODEL.equals("Pixel 6 Pro", ignoreCase = true)
+    }
+
     fun focusInfinityEnabled(): Boolean = preferences.getBoolean(
         KEY_FOCUS_INFINITY_ENABLED,
         DEFAULT_FOCUS_INFINITY_ENABLED,
@@ -528,6 +575,10 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_DAY_EXPOSURE_COMPOSITE_THRESHOLD = "day_exposure_composite_threshold"
         private const val KEY_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD = "night_exposure_composite_threshold"
         private const val KEY_MANUAL_NIGHT_TARGET_LUMA = "manual_night_target_luma"
+        private const val KEY_VIGNETTE_CORRECTION_ENABLED = "vignette_correction_enabled"
+        private const val KEY_VIGNETTE_CORRECTION_STRENGTH = "vignette_correction_strength"
+        private const val KEY_VIGNETTE_CORRECTION_POWER = "vignette_correction_power"
+        private const val KEY_VIGNETTE_CORRECTION_RADIUS = "vignette_correction_radius"
         private const val KEY_FOCUS_INFINITY_ENABLED = "focus_infinity_enabled"
         private const val KEY_LOW_NOISE_ISO = "low_noise_iso"
         private const val KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = "ultra_wide_night_exposure_seconds"
@@ -572,6 +623,9 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_DAY_EXPOSURE_COMPOSITE_THRESHOLD = 1.0
         private const val DEFAULT_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD = 2.0
         private const val DEFAULT_MANUAL_NIGHT_TARGET_LUMA = 0.12
+        private const val DEFAULT_VIGNETTE_CORRECTION_STRENGTH = 3.5
+        private const val DEFAULT_VIGNETTE_CORRECTION_POWER = 2.0
+        private const val DEFAULT_VIGNETTE_CORRECTION_RADIUS = 0.65
         private const val DEFAULT_FOCUS_INFINITY_ENABLED = true
         private const val DEFAULT_LOW_NOISE_ISO = 100
         private const val DEFAULT_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = 25.0

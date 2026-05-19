@@ -263,6 +263,19 @@ class MainActivity : ComponentActivity() {
             it.toDoubleOrNull()?.let(cameraSettings::setManualNightTargetLuma)
         })
         content.addView(helpText("Manual adaptive exposure targets this average luma. Use values like 0.08 for darker skies or 0.12 for brighter night detail."))
+        content.addView(settingCheckBox("Vignette correction", cameraSettings.vignetteCorrectionEnabled()) {
+            cameraSettings.setVignetteCorrectionEnabled(it)
+        })
+        content.addView(settingEditText("Vignette correction strength", cameraSettings.vignetteCorrectionStrength().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setVignetteCorrectionStrength)
+        })
+        content.addView(settingEditText("Vignette correction power", cameraSettings.vignetteCorrectionPower().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setVignetteCorrectionPower)
+        })
+        content.addView(settingEditText("Vignette correction radius", cameraSettings.vignetteCorrectionRadius().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setVignetteCorrectionRadius)
+        })
+        content.addView(helpText("Vignette correction applies a radial post-process attenuation before overlays. Strength controls center darkening; power controls the ramp; radius is where attenuation reaches zero."))
         content.addView(settingEditText("ISO cap", cameraSettings.lowNoiseIso().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setLowNoiseIso)
         })
@@ -732,7 +745,12 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$storageManagement"
+        val vignette = if (cameraSettings.vignetteCorrectionEnabled()) {
+            "; vignette ${cameraSettings.vignetteCorrectionStrength()}"
+        } else {
+            ""
+        }
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$storageManagement"
     }
 
     private fun requestNeededPermissions() {

@@ -162,6 +162,10 @@ class FenetreAdminServer(
                 "day_exposure_composite_threshold": ${settings.dayExposureCompositeThreshold()},
                 "night_exposure_composite_threshold": ${settings.nightExposureCompositeThreshold()},
                 "manual_night_target_luma": ${settings.manualNightTargetLuma()},
+                "vignette_correction_enabled": ${settings.vignetteCorrectionEnabled()},
+                "vignette_correction_strength": ${settings.vignetteCorrectionStrength()},
+                "vignette_correction_power": ${settings.vignetteCorrectionPower()},
+                "vignette_correction_radius": ${settings.vignetteCorrectionRadius()},
                 "low_noise_iso": ${settings.lowNoiseIso()},
                 "timestamp_overlay": ${settings.timestampOverlayEnabled()},
                 "sun_path_overlay": ${settings.sunPathOverlayEnabled()},
@@ -336,6 +340,12 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_manual_night_target_luma Configured average luma target for manual adaptive night exposure.")
             appendLine("# TYPE fenetre_android_manual_night_target_luma gauge")
             appendLine("fenetre_android_manual_night_target_luma{$cameraLabels} ${settings.manualNightTargetLuma()}")
+            appendLine("# HELP fenetre_android_vignette_correction_enabled Whether radial vignette correction is enabled.")
+            appendLine("# TYPE fenetre_android_vignette_correction_enabled gauge")
+            appendLine("fenetre_android_vignette_correction_enabled{$cameraLabels} ${if (settings.vignetteCorrectionEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_android_vignette_correction_strength Configured radial vignette correction strength.")
+            appendLine("# TYPE fenetre_android_vignette_correction_strength gauge")
+            appendLine("fenetre_android_vignette_correction_strength{$cameraLabels} ${settings.vignetteCorrectionStrength()}")
             appendLine("# HELP fenetre_android_camera2_night_scene_available Whether Camera2 advertises night scene mode.")
             appendLine("# TYPE fenetre_android_camera2_night_scene_available gauge")
             appendLine("fenetre_android_camera2_night_scene_available{$cameraLabels} ${if (camera2NightSceneAvailable) 1 else 0}")

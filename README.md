@@ -53,6 +53,10 @@ The manual adaptive night strategy:
 - targets a configurable dark night-frame brightness, defaulting to `12%`,
   avoiding the daytime-like luma target that overexposes bright foregrounds and
   city-lit skies;
+- can apply a configurable radial vignette-correction post-process before
+  overlays and metadata are written; on the Pixel 6 Pro this defaults to
+  darkening the center instead of brightening the corners, preserving ETTR in
+  the vignetted sky and avoiding extra corner noise;
 - clamps exposure time at the configured per-lens max, defaulting to `25s` for
   ultra-wide, `15s` for wide, and `5s` for tele;
 - once the exposure max is reached, allows ISO to rise above the cap.
