@@ -339,12 +339,45 @@ class FenetreCameraSettings(context: Context) {
     }
 
     fun nightCaptureStrategy(): NightCaptureStrategy {
-        val name = preferences.getString(KEY_NIGHT_CAPTURE_STRATEGY, NightCaptureStrategy.MANUAL_ADAPTIVE.name)
-        return NightCaptureStrategy.entries.firstOrNull { it.name == name } ?: NightCaptureStrategy.MANUAL_ADAPTIVE
+        val name = preferences.getString(KEY_NIGHT_CAPTURE_STRATEGY, DEFAULT_NIGHT_CAPTURE_STRATEGY.name)
+        return NightCaptureStrategy.entries.firstOrNull { it.name == name } ?: DEFAULT_NIGHT_CAPTURE_STRATEGY
     }
 
     fun setNightCaptureStrategy(value: NightCaptureStrategy) {
         preferences.edit().putString(KEY_NIGHT_CAPTURE_STRATEGY, value.name).apply()
+    }
+
+    fun dayExposureCompositeThreshold(): Double = preferences.getFloat(
+        KEY_DAY_EXPOSURE_COMPOSITE_THRESHOLD,
+        DEFAULT_DAY_EXPOSURE_COMPOSITE_THRESHOLD.toFloat(),
+    ).toDouble().coerceIn(0.0, 10_000.0)
+
+    fun setDayExposureCompositeThreshold(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_DAY_EXPOSURE_COMPOSITE_THRESHOLD, value.coerceIn(0.0, 10_000.0).toFloat())
+            .apply()
+    }
+
+    fun nightExposureCompositeThreshold(): Double = preferences.getFloat(
+        KEY_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD,
+        DEFAULT_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD.toFloat(),
+    ).toDouble().coerceIn(0.0, 10_000.0)
+
+    fun setNightExposureCompositeThreshold(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD, value.coerceIn(0.0, 10_000.0).toFloat())
+            .apply()
+    }
+
+    fun manualNightTargetLuma(): Double = preferences.getFloat(
+        KEY_MANUAL_NIGHT_TARGET_LUMA,
+        DEFAULT_MANUAL_NIGHT_TARGET_LUMA.toFloat(),
+    ).toDouble().coerceIn(0.01, 0.8)
+
+    fun setManualNightTargetLuma(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_MANUAL_NIGHT_TARGET_LUMA, value.coerceIn(0.01, 0.8).toFloat())
+            .apply()
     }
 
     fun focusInfinityEnabled(): Boolean = preferences.getBoolean(
@@ -492,6 +525,9 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_NIGHT_EXPOSURE_BOOST_STOPS = "night_exposure_boost_stops"
         private const val KEY_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES = "night_exposure_boost_twilight_buffer_minutes"
         private const val KEY_NIGHT_CAPTURE_STRATEGY = "night_capture_strategy"
+        private const val KEY_DAY_EXPOSURE_COMPOSITE_THRESHOLD = "day_exposure_composite_threshold"
+        private const val KEY_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD = "night_exposure_composite_threshold"
+        private const val KEY_MANUAL_NIGHT_TARGET_LUMA = "manual_night_target_luma"
         private const val KEY_FOCUS_INFINITY_ENABLED = "focus_infinity_enabled"
         private const val KEY_LOW_NOISE_ISO = "low_noise_iso"
         private const val KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = "ultra_wide_night_exposure_seconds"
@@ -530,8 +566,12 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_SUNRISE_OFFSET_END_MINUTES = 30
         private const val DEFAULT_SUNSET_OFFSET_START_MINUTES = 30
         private const val DEFAULT_SUNSET_OFFSET_END_MINUTES = 60
-        private const val DEFAULT_NIGHT_EXPOSURE_BOOST_STOPS = 1.0
+        private const val DEFAULT_NIGHT_EXPOSURE_BOOST_STOPS = 0.0
         private const val DEFAULT_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES = 90
+        private val DEFAULT_NIGHT_CAPTURE_STRATEGY = NightCaptureStrategy.MANUAL_ADAPTIVE
+        private const val DEFAULT_DAY_EXPOSURE_COMPOSITE_THRESHOLD = 1.0
+        private const val DEFAULT_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD = 2.0
+        private const val DEFAULT_MANUAL_NIGHT_TARGET_LUMA = 0.12
         private const val DEFAULT_FOCUS_INFINITY_ENABLED = true
         private const val DEFAULT_LOW_NOISE_ISO = 100
         private const val DEFAULT_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = 25.0

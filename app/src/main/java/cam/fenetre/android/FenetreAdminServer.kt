@@ -118,8 +118,7 @@ class FenetreAdminServer(
         val camera2MaxExposureSeconds = logicalBackCameraMaxExposureSeconds()
         val camera2NightSceneAvailable = camera2NightSceneAvailable()
         val activeNightStrategy = runtime.activeNightCaptureStrategy
-        val manualNightBoostActive = sunSchedule.isNightExposureBoostWindow() &&
-            activeNightStrategy == NightCaptureStrategy.MANUAL_ADAPTIVE
+        val manualNightBoostActive = false
         return """
             {
               "service": {
@@ -160,6 +159,10 @@ class FenetreAdminServer(
                 "night_exposure_boost_stops": ${settings.nightExposureBoostStops()},
                 "night_exposure_boost_twilight_buffer_minutes": ${settings.nightExposureBoostTwilightBufferMinutes()},
                 "night_exposure_boost_active": $manualNightBoostActive,
+                "day_exposure_composite_threshold": ${settings.dayExposureCompositeThreshold()},
+                "night_exposure_composite_threshold": ${settings.nightExposureCompositeThreshold()},
+                "manual_night_target_luma": ${settings.manualNightTargetLuma()},
+                "low_noise_iso": ${settings.lowNoiseIso()},
                 "timestamp_overlay": ${settings.timestampOverlayEnabled()},
                 "sun_path_overlay": ${settings.sunPathOverlayEnabled()},
                 "overlay_timezone": ${jsonString(settings.overlayTimezone())},
@@ -169,6 +172,9 @@ class FenetreAdminServer(
               "exposure": {
                 "configured_max_exposure_seconds": ${settings.maxExposureSeconds(runtime.lensMode)},
                 "camera2_logical_max_exposure_seconds": ${camera2MaxExposureSeconds ?: "null"},
+                "selected_camera_id": ${runtime.selectedCameraId?.let { jsonString(it) } ?: "null"},
+                "selected_camera_max_exposure_seconds": ${runtime.selectedCameraMaxExposureSeconds ?: "null"},
+                "selected_camera_vendor_max_exposure_seconds": ${runtime.selectedCameraVendorMaxExposureSeconds ?: "null"},
                 "requested_exposure_time_seconds": ${runtime.manualExposureSettings?.exposureTimeSeconds() ?: "null"},
                 "requested_frame_duration_seconds": ${runtime.manualExposureSettings?.frameDurationSeconds() ?: "null"},
                 "requested_iso": ${runtime.manualExposureSettings?.iso ?: "null"},
@@ -232,8 +238,7 @@ class FenetreAdminServer(
         val ageSeconds = fileStatus.metadataCapturedAtMs?.let { maxOf(0L, (now - it) / 1000L) }
         val camera2NightSceneAvailable = camera2NightSceneAvailable()
         val activeNightStrategy = runtime.activeNightCaptureStrategy
-        val manualNightBoostActive = sunSchedule.isNightExposureBoostWindow() &&
-            activeNightStrategy == NightCaptureStrategy.MANUAL_ADAPTIVE
+        val manualNightBoostActive = false
         val cameraLabels = """camera_name="${prometheusLabelValue(settings.cameraName())}""""
         val storageLabels = """device="android_app_data",fstype="app_data",mountpoint="${rootDir.absolutePath}""""
         val unameLabels = listOf(
@@ -328,6 +333,9 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_night_exposure_boost_active Whether the night exposure boost window is active.")
             appendLine("# TYPE fenetre_android_night_exposure_boost_active gauge")
             appendLine("fenetre_android_night_exposure_boost_active{$cameraLabels} ${if (manualNightBoostActive) 1 else 0}")
+            appendLine("# HELP fenetre_android_manual_night_target_luma Configured average luma target for manual adaptive night exposure.")
+            appendLine("# TYPE fenetre_android_manual_night_target_luma gauge")
+            appendLine("fenetre_android_manual_night_target_luma{$cameraLabels} ${settings.manualNightTargetLuma()}")
             appendLine("# HELP fenetre_android_camera2_night_scene_available Whether Camera2 advertises night scene mode.")
             appendLine("# TYPE fenetre_android_camera2_night_scene_available gauge")
             appendLine("fenetre_android_camera2_night_scene_available{$cameraLabels} ${if (camera2NightSceneAvailable) 1 else 0}")
@@ -728,6 +736,9 @@ data class FenetreRuntimeStatus(
     val manualExposureSettings: ManualExposureSettings? = null,
     val activeNightCaptureStrategy: NightCaptureStrategy = NightCaptureStrategy.MANUAL_ADAPTIVE,
     val cameraXNightExtensionAvailable: Boolean = false,
+    val selectedCameraId: String? = null,
+    val selectedCameraMaxExposureSeconds: Double? = null,
+    val selectedCameraVendorMaxExposureSeconds: Double? = null,
     val storageManagement: StorageManagementStatus = StorageManagementStatus.empty(File(".")),
 )
 

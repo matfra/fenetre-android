@@ -15,7 +15,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import android.util.Range
 import android.view.Surface
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -32,7 +34,6 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
-import kotlin.math.pow
 
 class FenetreCaptureService : LifecycleService() {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -52,6 +53,8 @@ class FenetreCaptureService : LifecycleService() {
     private var rotationDegrees = 90
     private var exposureMode = ExposureMode.AUTO
     private var captureMode = ExposureMode.AUTO
+    private var adaptiveCaptureMode = ExposureMode.PHONE_AUTO
+    private var selectedCameraId: String? = null
     private var manualExposureSettings: ManualExposureSettings? = null
     private var captureInProgress = false
     private var captureGeneration = 0
@@ -177,6 +180,9 @@ class FenetreCaptureService : LifecycleService() {
                     manualExposureSettings = manualExposureSettings,
                     activeNightCaptureStrategy = activeNightCaptureStrategy(),
                     cameraXNightExtensionAvailable = cameraXNightExtensionAvailable(),
+                    selectedCameraId = selectedCameraId,
+                    selectedCameraMaxExposureSeconds = selectedCameraMaxExposureSeconds(),
+                    selectedCameraVendorMaxExposureSeconds = selectedCameraVendorMaxExposureSeconds(),
                     storageManagement = storageManager.lastStatus(),
                 )
             }).also { it.start() }
@@ -190,10 +196,11 @@ class FenetreCaptureService : LifecycleService() {
                 val provider = providerFuture.get()
                 ensureExtensionsManager(provider)
                 lensMode = cameraSettings.lensMode()
+                selectedCameraId = cameraIdForLensMode(lensMode)
                 rotationDegrees = cameraSettings.rotationDegrees()
                 exposureMode = cameraSettings.exposureMode()
                 captureMode = resolvedCaptureMode()
-                if (exposureMode != ExposureMode.AUTO) {
+                if (captureMode != ExposureMode.AUTO) {
                     manualExposureSettings = null
                 }
                 val activeNightStrategy = activeNightCaptureStrategy()
@@ -234,8 +241,14 @@ class FenetreCaptureService : LifecycleService() {
     }
 
     private fun buildImageCapture(mode: ExposureMode): ImageCapture {
+        val activeNightStrategy = activeNightCaptureStrategy()
+        val captureMode = if (activeNightStrategy == NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION) {
+            ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY
+        } else {
+            ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
+        }
         val builder = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .setCaptureMode(captureMode)
             .setJpegQuality(92)
             .setTargetRotation(Surface.ROTATION_90)
         val extender = Camera2Interop.Extender(builder)
@@ -247,8 +260,9 @@ class FenetreCaptureService : LifecycleService() {
             CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
             CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF
         )
+        applyLensCorrectionOptions(extender)
         applyFocusOptions(extender)
-        if (mode == ExposureMode.AUTO && activeNightCaptureStrategy() == NightCaptureStrategy.CAMERA2_NIGHT_SCENE) {
+        if (mode == ExposureMode.AUTO && activeNightStrategy == NightCaptureStrategy.CAMERA2_NIGHT_SCENE) {
             extender.setCaptureRequestOption(
                 CaptureRequest.CONTROL_MODE,
                 CaptureRequest.CONTROL_MODE_USE_SCENE_MODE
@@ -265,6 +279,7 @@ class FenetreCaptureService : LifecycleService() {
         }
         if (mode == ExposureMode.AUTO && manualExposureSettings != null) {
             val settings = manualExposureSettings ?: return builder.build()
+            applySamsungNightOptions(extender)
             extender.setCaptureRequestOption(
                 CaptureRequest.CONTROL_AE_MODE,
                 CaptureRequest.CONTROL_AE_MODE_OFF
@@ -278,6 +293,27 @@ class FenetreCaptureService : LifecycleService() {
             extender.setCaptureRequestOption(CaptureRequest.SENSOR_SENSITIVITY, settings.iso)
         }
         return builder.build()
+    }
+
+    private fun applySamsungNightOptions(extender: Camera2Interop.Extender<ImageCapture>) {
+        if (!Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
+            return
+        }
+        extender.setCaptureRequestOption(SAMSUNG_SUPER_NIGHT_SHOT_MODE, 1)
+        extender.setCaptureRequestOption(SAMSUNG_SSM_SHOT_MODE, 1)
+    }
+
+    private fun applyLensCorrectionOptions(extender: Camera2Interop.Extender<ImageCapture>) {
+        extender.setCaptureRequestOption(
+            CaptureRequest.SHADING_MODE,
+            CaptureRequest.SHADING_MODE_HIGH_QUALITY
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            extender.setCaptureRequestOption(
+                CaptureRequest.DISTORTION_CORRECTION_MODE,
+                CaptureRequest.DISTORTION_CORRECTION_MODE_FAST
+            )
+        }
     }
 
     private fun applyFocusOptions(extender: Camera2Interop.Extender<ImageCapture>) {
@@ -297,7 +333,14 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun cameraSelectorFor(strategy: NightCaptureStrategy): CameraSelector {
         if (strategy != NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION) {
-            return CameraSelector.DEFAULT_BACK_CAMERA
+            val cameraId = selectedCameraId ?: return CameraSelector.DEFAULT_BACK_CAMERA
+            return CameraSelector.Builder()
+                .addCameraFilter { cameraInfos ->
+                    cameraInfos.filter { info ->
+                        Camera2CameraInfo.from(info).cameraId == cameraId
+                    }
+                }
+                .build()
         }
         val manager = extensionsManager ?: return CameraSelector.DEFAULT_BACK_CAMERA
         return try {
@@ -442,8 +485,13 @@ class FenetreCaptureService : LifecycleService() {
             storageManager.maybeSchedule()
         }
         updateNotification("Last capture: ${photoFile.name}; web: ${webServer?.url().orEmpty()}")
-        val nextManualExposure = nextManualExposureSettings(captureExif, imageBrightness)
-        if (nextManualExposure != manualExposureSettings) {
+        val modeChanged = updateAdaptiveCaptureMode(captureExif, exposureComposite)
+        val nextManualExposure = nextManualExposureSettings(
+            captureExif,
+            imageBrightness,
+            manualModeActive = exposureMode == ExposureMode.AUTO && adaptiveCaptureMode == ExposureMode.AUTO,
+        )
+        if (modeChanged || nextManualExposure != manualExposureSettings) {
             manualExposureSettings = nextManualExposure
             mainHandler.post { bindCamera(scheduleDelayMs = sunSchedule.captureIntervalSeconds() * 1000L) }
         } else {
@@ -482,10 +530,61 @@ class FenetreCaptureService : LifecycleService() {
 
     private fun thermalStatus(): FenetreThermalStatus = FenetreThermal.status(this, cameraSettings)
 
-    private fun resolvedCaptureMode(): ExposureMode = exposureMode
+    private fun resolvedCaptureMode(): ExposureMode {
+        if (exposureMode == ExposureMode.AUTO) {
+            return adaptiveCaptureMode
+        }
+        return exposureMode
+    }
 
-    private fun nextManualExposureSettings(captureExif: CaptureExif, imageBrightness: Double?): ManualExposureSettings? {
+    private fun updateAdaptiveCaptureMode(captureExif: CaptureExif, exposureComposite: Double?): Boolean {
         if (exposureMode != ExposureMode.AUTO) {
+            return setAdaptiveCaptureMode(ExposureMode.PHONE_AUTO)
+        }
+        val composite = exposureComposite ?: return false
+        val iso = captureExif.iso ?: return false
+        val nextMode = if (adaptiveCaptureMode == ExposureMode.PHONE_AUTO) {
+            if (
+                iso > cameraSettings.lowNoiseIso() &&
+                composite > cameraSettings.nightExposureCompositeThreshold()
+            ) {
+                Log.i(
+                    TAG,
+                    "Switching to night capture strategy: ISO $iso * exposure = $composite"
+                )
+                ExposureMode.AUTO
+            } else {
+                ExposureMode.PHONE_AUTO
+            }
+        } else if (composite < cameraSettings.dayExposureCompositeThreshold()) {
+            Log.i(
+                TAG,
+                "Switching to phone auto exposure: ISO $iso * exposure = $composite"
+            )
+            ExposureMode.PHONE_AUTO
+        } else {
+            ExposureMode.AUTO
+        }
+        return setAdaptiveCaptureMode(nextMode)
+    }
+
+    private fun setAdaptiveCaptureMode(mode: ExposureMode): Boolean {
+        if (adaptiveCaptureMode == mode) {
+            return false
+        }
+        adaptiveCaptureMode = mode
+        if (mode != ExposureMode.AUTO) {
+            manualExposureSettings = null
+        }
+        return true
+    }
+
+    private fun nextManualExposureSettings(
+        captureExif: CaptureExif,
+        imageBrightness: Double?,
+        manualModeActive: Boolean = captureMode == ExposureMode.AUTO,
+    ): ManualExposureSettings? {
+        if (!manualModeActive) {
             return null
         }
         if (activeNightCaptureStrategy() != NightCaptureStrategy.MANUAL_ADAPTIVE) {
@@ -504,10 +603,17 @@ class FenetreCaptureService : LifecycleService() {
         val sensitivityRange = characteristics?.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
         val maxFrameDuration = characteristics?.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
 
-        val minExposureNs = exposureRange?.lower ?: MIN_MANUAL_EXPOSURE_NS
-        val maxExposureNs = exposureRange?.let { range ->
-            cameraSettings.maxExposureNs(lensMode).coerceIn(range.lower, range.upper)
-        } ?: cameraSettings.maxExposureNs(lensMode)
+        val vendorExposureRange = samsungVendorExposureTimeRange(characteristics)
+        val effectiveExposureRange = vendorExposureRange ?: exposureRange
+        val minExposureNs = effectiveExposureRange?.lower ?: MIN_MANUAL_EXPOSURE_NS
+        val configuredMaxExposureNs = if (vendorExposureRange != null) {
+            minOf(cameraSettings.maxExposureNs(lensMode), SAMSUNG_SAFE_VENDOR_EXPOSURE_NS)
+        } else {
+            cameraSettings.maxExposureNs(lensMode)
+        }
+        val maxExposureNs = effectiveExposureRange?.let { range ->
+            configuredMaxExposureNs.coerceIn(range.lower, range.upper)
+        } ?: configuredMaxExposureNs
         val minIso = sensitivityRange?.lower ?: MIN_MANUAL_ISO
         val maxIso = sensitivityRange?.upper ?: MAX_MANUAL_ISO
         val isoCap = cameraSettings.lowNoiseIso().coerceIn(minIso, maxIso)
@@ -530,7 +636,9 @@ class FenetreCaptureService : LifecycleService() {
             iso = (desiredComposite / maxExposureNs.toDouble()).roundToInt().coerceIn(isoCap, maxIso)
         }
         val targetFrameDuration = exposureNs + FRAME_DURATION_PADDING_NS
-        val frameDurationNs = maxFrameDuration?.let { maxDuration ->
+        val frameDurationNs = maxFrameDuration?.takeIf { maxDuration ->
+            vendorExposureRange == null || maxDuration >= exposureNs
+        }?.let { maxDuration ->
             targetFrameDuration.coerceIn(exposureNs, maxDuration)
         } ?: targetFrameDuration
         return ManualExposureSettings(exposureNs, frameDurationNs, iso)
@@ -541,26 +649,15 @@ class FenetreCaptureService : LifecycleService() {
         if (brightness <= 0.0) {
             return MAX_EXPOSURE_ADJUSTMENT_FACTOR
         }
-        val rawFactor = targetLuma() / brightness
+        val rawFactor = cameraSettings.manualNightTargetLuma() / brightness
         if (rawFactor in (1.0 - EXPOSURE_DEADBAND)..(1.0 + EXPOSURE_DEADBAND)) {
             return 1.0
         }
         return rawFactor.coerceIn(MIN_EXPOSURE_ADJUSTMENT_FACTOR, MAX_EXPOSURE_ADJUSTMENT_FACTOR)
     }
 
-    private fun targetLuma(): Double {
-        if (
-            !sunSchedule.isNightExposureBoostWindow() ||
-            activeNightCaptureStrategy() != NightCaptureStrategy.MANUAL_ADAPTIVE
-        ) {
-            return TARGET_LUMA
-        }
-        return (TARGET_LUMA * 2.0.pow(cameraSettings.nightExposureBoostStops()))
-            .coerceAtMost(NIGHT_TARGET_LUMA_CAP)
-    }
-
     private fun activeNightCaptureStrategy(): NightCaptureStrategy {
-        if (!sunSchedule.isNightExposureBoostWindow()) {
+        if (captureMode != ExposureMode.AUTO) {
             return NightCaptureStrategy.MANUAL_ADAPTIVE
         }
         val strategy = cameraSettings.nightCaptureStrategy()
@@ -593,13 +690,73 @@ class FenetreCaptureService : LifecycleService() {
     private fun backCameraCharacteristics(): CameraCharacteristics? {
         return try {
             val cameraManager = getSystemService(CameraManager::class.java)
-            val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+            val cameraId = selectedCameraId ?: cameraManager.cameraIdList.firstOrNull { id ->
                 cameraManager.getCameraCharacteristics(id)
                     .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
             } ?: return null
             cameraManager.getCameraCharacteristics(cameraId)
         } catch (exception: Exception) {
             Log.w(TAG, "Unable to read camera characteristics", exception)
+            null
+        }
+    }
+
+    private fun selectedCameraMaxExposureSeconds(): Double? {
+        return backCameraCharacteristics()
+            ?.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+            ?.upper
+            ?.let { it / 1_000_000_000.0 }
+    }
+
+    private fun selectedCameraVendorMaxExposureSeconds(): Double? {
+        return samsungVendorExposureTimeRange(backCameraCharacteristics())
+            ?.upper
+            ?.let { it / 1_000_000_000.0 }
+    }
+
+    private fun samsungVendorExposureTimeRange(
+        characteristics: CameraCharacteristics?,
+    ): Range<Long>? {
+        if (!Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
+            return null
+        }
+        return try {
+            val values = characteristics?.get(SAMSUNG_EXPOSURE_TIME_RANGE) ?: return null
+            if (values.size < 2) {
+                null
+            } else {
+                val lower = values[0]
+                val upper = values[1]
+                if (lower > 0L && upper >= lower) Range(lower, upper) else null
+            }
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to read Samsung vendor exposure range", exception)
+            null
+        }
+    }
+
+    private fun cameraIdForLensMode(mode: LensMode): String? {
+        return try {
+            val cameraManager = getSystemService(CameraManager::class.java)
+            val backCameras = cameraManager.cameraIdList.mapNotNull { id ->
+                val characteristics = cameraManager.getCameraCharacteristics(id)
+                if (characteristics.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_BACK) {
+                    return@mapNotNull null
+                }
+                val focalLength = characteristics
+                    .get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                    ?.firstOrNull()
+                    ?: return@mapNotNull null
+                id to focalLength
+            }.sortedBy { it.second }
+
+            when (mode) {
+                LensMode.ULTRA_WIDE -> backCameras.firstOrNull()?.first
+                LensMode.WIDE -> backCameras.getOrNull(backCameras.size / 2)?.first
+                LensMode.TELE -> backCameras.lastOrNull()?.first
+            }
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to select camera ID for lens mode", exception)
             null
         }
     }
@@ -685,20 +842,31 @@ class FenetreCaptureService : LifecycleService() {
         private const val CHANNEL_ID = "fenetre_capture"
         private const val NOTIFICATION_ID = 1001
         private const val FRAME_DURATION_PADDING_NS = 500_000_000L
+        private const val SAMSUNG_SAFE_VENDOR_EXPOSURE_NS = 8_000_000_000L
         private const val MIN_MANUAL_EXPOSURE_NS = 100_000L
         private const val MIN_MANUAL_ISO = 25
         private const val MAX_MANUAL_ISO = 6400
         private const val MIN_CAPTURE_TIMEOUT_MS = 60_000L
         private const val CAPTURE_TIMEOUT_PADDING_MS = 15_000L
         private const val COOLDOWN_CHECK_INTERVAL_MS = 60_000L
-        private const val TARGET_LUMA = 0.45
-        private const val NIGHT_TARGET_LUMA_CAP = 0.75
         private const val INFINITY_FOCUS_DIOPTERS = 0.0f
         private const val EXPOSURE_DEADBAND = 0.08
         private const val MIN_EXPOSURE_ADJUSTMENT_FACTOR = 0.8
         private const val MAX_EXPOSURE_ADJUSTMENT_FACTOR = 1.25
         private const val LUMA_SAMPLE_SIZE = 256
         private const val TAG = "FenetreCaptureService"
+        private val SAMSUNG_SUPER_NIGHT_SHOT_MODE = CaptureRequest.Key(
+            "samsung.android.control.superNightShotMode",
+            Int::class.javaObjectType,
+        )
+        private val SAMSUNG_SSM_SHOT_MODE = CaptureRequest.Key(
+            "samsung.android.control.ssmShotMode",
+            Int::class.javaObjectType,
+        )
+        private val SAMSUNG_EXPOSURE_TIME_RANGE = CameraCharacteristics.Key(
+            "samsung.android.sensor.info.exposureTimeRange",
+            LongArray::class.java,
+        )
     }
 }
 

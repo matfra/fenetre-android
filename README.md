@@ -31,18 +31,42 @@ The app serves the public camera UI on port `8888` and the admin UI/API on port 
 
 ## Exposure Control
 
-The default exposure mode is `Adaptive low ISO`. The first frame after startup
-uses Android auto exposure as a baseline. After that, the app applies manual
-sensor controls using the last frame's EXIF and measured brightness:
+The default exposure mode is `Adaptive low ISO`, but the app does not force
+manual sensor controls all day. It starts in `Phone auto`, then uses the last
+frame's EXIF to compute an exposure composite:
 
-- keep ISO at or below the configured ISO cap, default `100`, while exposure
-  time can still increase;
-- clamp exposure time at the configured per-lens max, defaulting to `25s` for
+```text
+exposure composite = ISO * exposure_time_seconds
+```
+
+When phone auto rises above the configured ISO cap, default `100`, and the
+composite exceeds the night threshold, default `2.0`, the app switches to the
+configured night strategy. When the composite falls below the day threshold,
+default `1.0`, it switches back to phone auto. This keeps daytime captures on
+the phone's normal processing pipeline while still allowing long low-ISO night
+captures.
+
+The manual adaptive night strategy:
+
+- keeps ISO at or below the configured ISO cap while exposure time can still
+  increase;
+- targets a configurable dark night-frame brightness, defaulting to `12%`,
+  avoiding the daytime-like luma target that overexposes bright foregrounds and
+  city-lit skies;
+- clamps exposure time at the configured per-lens max, defaulting to `25s` for
   ultra-wide, `15s` for wide, and `5s` for tele;
-- once the exposure max is reached, allow ISO to rise above the cap.
+- once the exposure max is reached, allows ISO to rise above the cap.
 
-`Phone auto` is available as a fallback and leaves exposure decisions to
-Android/CameraX.
+Night exposure boost is independent from the day/night mode switch. It defaults
+to `0` and only applies inside the configured twilight-buffer night window when
+explicitly enabled.
+
+## Tested Devices
+
+| Device | Tested lens | Day mode | Recommended night mode | Notes |
+| --- | --- | --- | --- | --- |
+| Google Pixel 6 Pro | Ultra-wide, wide | Phone auto | Manual adaptive | CameraX Night extension is available but produced disappointing quality in testing. Manual adaptive gives smoother low-ISO long exposures. Infinity focus is enabled. Camera2 logical max exposure reports about `8.31s`; EXIF can report `4.3s` even when a longer exposure was requested. |
+| Samsung Galaxy S20 `SM-G981V` | Ultra-wide | Phone auto | Manual adaptive | CameraX Night extension is not available. Camera2 night scene is available but raised ISO aggressively in testing. The selected ultra-wide camera reports a standard Camera2 max exposure of about `0.15379s`, while Samsung vendor metadata advertises `30s`; manual adaptive uses the Samsung range but caps it at `8s`, because longer requests caused CameraX capture timeouts. |
 
 ## Storage Management
 

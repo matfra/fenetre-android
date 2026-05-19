@@ -251,7 +251,18 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Night boost twilight buffer minutes", cameraSettings.nightExposureBoostTwilightBufferMinutes().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setNightExposureBoostTwilightBufferMinutes)
         })
-        content.addView(helpText("Night boost applies only after sunset plus this buffer and before sunrise minus this buffer. Default +2 stops means 4x target exposure at night."))
+        content.addView(helpText("Night boost applies only after sunset plus this buffer and before sunrise minus this buffer. Leave it at 0 to use the normal adaptive brightness target."))
+        content.addView(settingEditText("Day composite threshold", cameraSettings.dayExposureCompositeThreshold().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setDayExposureCompositeThreshold)
+        })
+        content.addView(settingEditText("Night composite threshold", cameraSettings.nightExposureCompositeThreshold().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setNightExposureCompositeThreshold)
+        })
+        content.addView(helpText("Exposure composite is ISO times shutter seconds. Phone auto switches to manual adaptive above the night threshold when ISO rises over the cap; manual adaptive switches back below the day threshold."))
+        content.addView(settingEditText("Manual night target brightness", cameraSettings.manualNightTargetLuma().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setManualNightTargetLuma)
+        })
+        content.addView(helpText("Manual adaptive exposure targets this average luma. Use values like 0.08 for darker skies or 0.12 for brighter night detail."))
         content.addView(settingEditText("ISO cap", cameraSettings.lowNoiseIso().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setLowNoiseIso)
         })
@@ -721,7 +732,7 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label} +${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$storageManagement"
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$storageManagement"
     }
 
     private fun requestNeededPermissions() {

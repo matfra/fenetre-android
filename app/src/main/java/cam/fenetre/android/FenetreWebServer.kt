@@ -286,6 +286,14 @@ class FenetreWebServer(
                 }
 
                 function modeLabel(metadata) {
+                  const exposureMode = metadata.exposure_mode || 'auto';
+                  const captureMode = metadata.capture_mode || exposureMode;
+                  if (captureMode === 'phone_auto') {
+                    return 'Phone auto';
+                  }
+                  if (captureMode && captureMode !== exposureMode) {
+                    return exposureMode.replace('_', ' ') + ' / ' + captureMode.replace('_', ' ');
+                  }
                   const strategy = metadata.night_capture_strategy_active || metadata.night_capture_strategy;
                   if (strategy === 'manual_adaptive') {
                     return 'Manual adaptive';
@@ -296,9 +304,7 @@ class FenetreWebServer(
                   if (strategy === 'camera2_night_scene') {
                     return 'Camera2 night';
                   }
-                  const exposureMode = (metadata.exposure_mode || 'auto').replace('_', ' ');
-                  const captureMode = (metadata.capture_mode || '').replace('_', ' ');
-                  return captureMode && captureMode !== exposureMode ? exposureMode + ' / ' + captureMode : exposureMode;
+                  return exposureMode.replace('_', ' ');
                 }
 
                 async function refreshCamera() {
