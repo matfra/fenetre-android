@@ -285,7 +285,11 @@ class MainActivity : ComponentActivity() {
             })
         }
 
-        content.addView(sectionTitle("Overlays"))
+        content.addView(sectionTitle("Camera location"))
+        content.addView(actionButton("Set from phone GPS") {
+            useDeviceLocation()
+        })
+        content.addView(helpText("Uses this Android phone's GPS or network location for the sun path overlay and sunrise/sunset scheduling."))
         content.addView(settingCheckBox("Timestamp overlay", cameraSettings.timestampOverlayEnabled()) {
             cameraSettings.setTimestampOverlayEnabled(it)
         })
@@ -310,9 +314,6 @@ class MainActivity : ComponentActivity() {
             onInputCreated = { longitudeInput = it },
         ) {
             it.toDoubleOrNull()?.let(cameraSettings::setOverlayLongitude)
-        })
-        content.addView(actionButton("Use phone location") {
-            useDeviceLocation()
         })
         content.addView(helpText("Timestamp is drawn at bottom right. Sun path and sunrise/sunset scheduling use the configured camera location."))
 
