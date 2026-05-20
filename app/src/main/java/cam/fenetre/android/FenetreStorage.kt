@@ -89,6 +89,7 @@ class FenetreStorage(context: Context, private val settings: FenetreCameraSettin
         exposureComposite: Double?,
         imageBrightness: Double?,
         vignetteCorrectionApplied: Boolean,
+        ssimResult: SsimResult,
         captureExif: CaptureExif,
     ) {
         val cameraName = cameraName()
@@ -119,15 +120,21 @@ class FenetreStorage(context: Context, private val settings: FenetreCameraSettin
               "vignette_correction_strength": ${settings.vignetteCorrectionStrength()},
               "vignette_correction_power": ${settings.vignetteCorrectionPower()},
               "vignette_correction_radius": ${settings.vignetteCorrectionRadius()},
+              "ssim_enabled": ${settings.ssimEnabled()},
+              "ssim_value": ${ssimResult.value?.toString() ?: "null"},
+              "ssim_target": ${ssimResult.target},
+              "ssim_interval_seconds": ${ssimResult.intervalSeconds},
+              "ssim_area": ${jsonString(settings.ssimArea())},
+              "ssim_compared": ${ssimResult.compared},
               "low_noise_iso": ${settings.lowNoiseIso()},
               "image_brightness": ${imageBrightness?.toString() ?: "null"},
               "iso": ${captureExif.iso?.toString() ?: "null"},
               "exposure_time": ${captureExif.exposureTimeSeconds?.toString() ?: "null"},
-              "shutter_speed": ${captureExif.shutterSpeed?.let { "\"$it\"" } ?: "null"},
-              "white_balance": ${captureExif.whiteBalance?.let { "\"$it\"" } ?: "null"},
+              "shutter_speed": ${captureExif.shutterSpeed?.let { jsonString(it) } ?: "null"},
+              "white_balance": ${captureExif.whiteBalance?.let { jsonString(it) } ?: "null"},
               "timestamp_overlay": ${settings.timestampOverlayEnabled()},
               "sun_path_overlay": ${settings.sunPathOverlayEnabled()},
-              "overlay_timezone": "${settings.overlayTimezone()}",
+              "overlay_timezone": ${jsonString(settings.overlayTimezone())},
               "overlay_lat": ${settings.overlayLatitude()},
               "overlay_lon": ${settings.overlayLongitude()},
               "captured_at_ms": ${System.currentTimeMillis()}
@@ -139,6 +146,23 @@ class FenetreStorage(context: Context, private val settings: FenetreCameraSettin
     fun rootPath(): String = rootDir.absolutePath
 
     fun rootDir(): File = rootDir
+
+    private fun jsonString(value: String): String {
+        return buildString {
+            append('"')
+            value.forEach { char ->
+                when (char) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '\n' -> append("\\n")
+                    '\r' -> append("\\r")
+                    '\t' -> append("\\t")
+                    else -> append(char)
+                }
+            }
+            append('"')
+        }
+    }
 
     companion object {
         private val DAY_DIR_PATTERN = Regex("""\d{4}-\d{2}-\d{2}""")

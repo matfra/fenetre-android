@@ -422,6 +422,66 @@ class FenetreCameraSettings(context: Context) {
             .apply()
     }
 
+    fun ssimEnabled(): Boolean = preferences.getBoolean(KEY_SSIM_ENABLED, DEFAULT_SSIM_ENABLED)
+
+    fun setSsimEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_SSIM_ENABLED, value).apply()
+    }
+
+    fun ssimSetpoint(): Double = preferences.getFloat(
+        KEY_SSIM_SETPOINT,
+        DEFAULT_SSIM_SETPOINT.toFloat(),
+    ).toDouble().coerceIn(0.0, 1.0)
+
+    fun setSsimSetpoint(value: Double) {
+        preferences.edit().putFloat(KEY_SSIM_SETPOINT, value.coerceIn(0.0, 1.0).toFloat()).apply()
+    }
+
+    fun ssimArea(): String = cleanText(
+        preferences.getString(KEY_SSIM_AREA, DEFAULT_SSIM_AREA),
+        DEFAULT_SSIM_AREA,
+    )
+
+    fun setSsimArea(value: String) {
+        preferences.edit().putString(KEY_SSIM_AREA, cleanText(value, DEFAULT_SSIM_AREA)).apply()
+    }
+
+    fun ssimMinIntervalSeconds(): Int = preferences.getInt(
+        KEY_SSIM_MIN_INTERVAL_SECONDS,
+        DEFAULT_SSIM_MIN_INTERVAL_SECONDS,
+    ).coerceIn(1, 3600)
+
+    fun setSsimMinIntervalSeconds(value: Int) {
+        preferences.edit().putInt(KEY_SSIM_MIN_INTERVAL_SECONDS, value.coerceIn(1, 3600)).apply()
+    }
+
+    fun ssimMaxIntervalSeconds(): Int = preferences.getInt(
+        KEY_SSIM_MAX_INTERVAL_SECONDS,
+        DEFAULT_SSIM_MAX_INTERVAL_SECONDS,
+    ).coerceIn(ssimMinIntervalSeconds(), 3600)
+
+    fun setSsimMaxIntervalSeconds(value: Int) {
+        preferences.edit().putInt(KEY_SSIM_MAX_INTERVAL_SECONDS, value.coerceIn(1, 3600)).apply()
+    }
+
+    fun ssimDecreaseFactor(): Double = preferences.getFloat(
+        KEY_SSIM_DECREASE_FACTOR,
+        DEFAULT_SSIM_DECREASE_FACTOR.toFloat(),
+    ).toDouble().coerceIn(0.1, 1.0)
+
+    fun setSsimDecreaseFactor(value: Double) {
+        preferences.edit().putFloat(KEY_SSIM_DECREASE_FACTOR, value.coerceIn(0.1, 1.0).toFloat()).apply()
+    }
+
+    fun ssimIncreaseSeconds(): Int = preferences.getInt(
+        KEY_SSIM_INCREASE_SECONDS,
+        DEFAULT_SSIM_INCREASE_SECONDS,
+    ).coerceIn(0, 3600)
+
+    fun setSsimIncreaseSeconds(value: Int) {
+        preferences.edit().putInt(KEY_SSIM_INCREASE_SECONDS, value.coerceIn(0, 3600)).apply()
+    }
+
     private fun defaultVignetteCorrectionEnabled(): Boolean {
         return Build.MANUFACTURER.equals("google", ignoreCase = true) &&
             Build.MODEL.equals("Pixel 6 Pro", ignoreCase = true)
@@ -579,6 +639,13 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_VIGNETTE_CORRECTION_STRENGTH = "vignette_correction_strength"
         private const val KEY_VIGNETTE_CORRECTION_POWER = "vignette_correction_power"
         private const val KEY_VIGNETTE_CORRECTION_RADIUS = "vignette_correction_radius"
+        private const val KEY_SSIM_ENABLED = "ssim_enabled"
+        private const val KEY_SSIM_SETPOINT = "ssim_setpoint"
+        private const val KEY_SSIM_AREA = "ssim_area"
+        private const val KEY_SSIM_MIN_INTERVAL_SECONDS = "ssim_min_interval_seconds"
+        private const val KEY_SSIM_MAX_INTERVAL_SECONDS = "ssim_max_interval_seconds"
+        private const val KEY_SSIM_DECREASE_FACTOR = "ssim_decrease_factor"
+        private const val KEY_SSIM_INCREASE_SECONDS = "ssim_increase_seconds"
         private const val KEY_FOCUS_INFINITY_ENABLED = "focus_infinity_enabled"
         private const val KEY_LOW_NOISE_ISO = "low_noise_iso"
         private const val KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = "ultra_wide_night_exposure_seconds"
@@ -626,6 +693,13 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_VIGNETTE_CORRECTION_STRENGTH = 3.5
         private const val DEFAULT_VIGNETTE_CORRECTION_POWER = 2.0
         private const val DEFAULT_VIGNETTE_CORRECTION_RADIUS = 0.65
+        private const val DEFAULT_SSIM_ENABLED = true
+        private const val DEFAULT_SSIM_SETPOINT = 0.85
+        private const val DEFAULT_SSIM_AREA = "0,0,1,1"
+        private const val DEFAULT_SSIM_MIN_INTERVAL_SECONDS = 5
+        private const val DEFAULT_SSIM_MAX_INTERVAL_SECONDS = 90
+        private const val DEFAULT_SSIM_DECREASE_FACTOR = 0.9
+        private const val DEFAULT_SSIM_INCREASE_SECONDS = 2
         private const val DEFAULT_FOCUS_INFINITY_ENABLED = true
         private const val DEFAULT_LOW_NOISE_ISO = 100
         private const val DEFAULT_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = 25.0

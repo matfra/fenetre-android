@@ -65,6 +65,20 @@ Night exposure boost is independent from the day/night mode switch. It defaults
 to `0` and only applies inside the configured twilight-buffer night window when
 explicitly enabled.
 
+## SSIM Adaptive Interval
+
+When SSIM adaptive interval is enabled, the app samples each post-processed
+capture before overlays are drawn, converts the configured crop to a `50x50`
+grayscale image, and keeps that sample in memory for comparison with the next
+frame. This mirrors the Python service without decoding the previous JPEG again
+or letting timestamp/sun-path overlays affect the similarity score.
+
+The `ssim_area` setting accepts `x1,y1,x2,y2` as either ratios, when all values
+are `<= 1.0`, or absolute pixels. If the latest SSIM is below the configured
+target, the next interval is shortened by the decrease factor. If it is above
+target, the interval grows by the configured number of seconds, bounded by the
+configured min/max interval. Sunrise/sunset fast mode takes precedence.
+
 ## Tested Devices
 
 | Device | Tested lens | Day mode | Recommended night mode | Notes |

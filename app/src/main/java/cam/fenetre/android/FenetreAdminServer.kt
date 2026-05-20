@@ -136,7 +136,7 @@ class FenetreAdminServer(
                 "deployment_name": ${jsonString(settings.deploymentName())},
                 "public_base_url": ${jsonString(settings.publicBaseUrl())},
                 "capture_interval_seconds": ${settings.captureIntervalSeconds()},
-                "effective_capture_interval_seconds": ${sunSchedule.captureIntervalSeconds()},
+                "effective_capture_interval_seconds": ${runtime.ssimIntervalSeconds},
                 "daily_timelapse_encoder": ${jsonString(settings.dailyTimelapseEncoderMode().name.lowercase())},
                 "daily_timelapse_file_extension": ${jsonString(settings.dailyTimelapseEncoderMode().fileExtension)},
                 "daily_vp9_bitrate_bits_per_second": ${settings.dailyVp9BitrateBitsPerSecond()},
@@ -171,7 +171,16 @@ class FenetreAdminServer(
                 "sun_path_overlay": ${settings.sunPathOverlayEnabled()},
                 "overlay_timezone": ${jsonString(settings.overlayTimezone())},
                 "overlay_lat": ${settings.overlayLatitude()},
-                "overlay_lon": ${settings.overlayLongitude()}
+                "overlay_lon": ${settings.overlayLongitude()},
+                "ssim_enabled": ${settings.ssimEnabled()},
+                "ssim_value": ${runtime.ssimValue ?: "null"},
+                "ssim_target": ${settings.ssimSetpoint()},
+                "ssim_area": ${jsonString(settings.ssimArea())},
+                "ssim_interval_seconds": ${runtime.ssimIntervalSeconds},
+                "ssim_min_interval_seconds": ${settings.ssimMinIntervalSeconds()},
+                "ssim_max_interval_seconds": ${settings.ssimMaxIntervalSeconds()},
+                "ssim_decrease_factor": ${settings.ssimDecreaseFactor()},
+                "ssim_increase_seconds": ${settings.ssimIncreaseSeconds()}
               },
               "exposure": {
                 "configured_max_exposure_seconds": ${settings.maxExposureSeconds(runtime.lensMode)},
@@ -307,7 +316,16 @@ class FenetreAdminServer(
             appendLine("fenetre_android_capture_interval_seconds{$cameraLabels} ${settings.captureIntervalSeconds()}")
             appendLine("# HELP fenetre_android_effective_capture_interval_seconds Current effective capture interval.")
             appendLine("# TYPE fenetre_android_effective_capture_interval_seconds gauge")
-            appendLine("fenetre_android_effective_capture_interval_seconds{$cameraLabels} ${sunSchedule.captureIntervalSeconds()}")
+            appendLine("fenetre_android_effective_capture_interval_seconds{$cameraLabels} ${runtime.ssimIntervalSeconds}")
+            appendLine("# HELP fenetre_android_ssim_value Latest SSIM measurement.")
+            appendLine("# TYPE fenetre_android_ssim_value gauge")
+            appendLine("fenetre_android_ssim_value{$cameraLabels} ${runtime.ssimValue ?: -1.0}")
+            appendLine("# HELP fenetre_android_ssim_target Configured SSIM target.")
+            appendLine("# TYPE fenetre_android_ssim_target gauge")
+            appendLine("fenetre_android_ssim_target{$cameraLabels} ${settings.ssimSetpoint()}")
+            appendLine("# HELP fenetre_android_ssim_enabled Whether SSIM adaptive interval is enabled.")
+            appendLine("# TYPE fenetre_android_ssim_enabled gauge")
+            appendLine("fenetre_android_ssim_enabled{$cameraLabels} ${if (settings.ssimEnabled()) 1 else 0}")
             appendLine("# HELP fenetre_android_daily_timelapse_encoder_mode Configured daily timelapse encoder mode as labeled one-hot gauges.")
             appendLine("# TYPE fenetre_android_daily_timelapse_encoder_mode gauge")
             DailyTimelapseEncoderMode.entries.forEach { mode ->
@@ -749,6 +767,8 @@ data class FenetreRuntimeStatus(
     val selectedCameraId: String? = null,
     val selectedCameraMaxExposureSeconds: Double? = null,
     val selectedCameraVendorMaxExposureSeconds: Double? = null,
+    val ssimValue: Double? = null,
+    val ssimIntervalSeconds: Int = 0,
     val storageManagement: StorageManagementStatus = StorageManagementStatus.empty(File(".")),
 )
 

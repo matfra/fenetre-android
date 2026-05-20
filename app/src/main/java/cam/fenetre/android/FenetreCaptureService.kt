@@ -45,6 +45,7 @@ class FenetreCaptureService : LifecycleService() {
     private lateinit var storageManager: FenetreStorageManager
     private lateinit var overlays: FenetreOverlays
     private lateinit var vignetteCorrection: FenetreVignetteCorrection
+    private lateinit var ssim: FenetreSsim
     private lateinit var sunSchedule: FenetreSunSchedule
     private var extensionsManager: ExtensionsManager? = null
     private var webServer: FenetreWebServer? = null
@@ -61,6 +62,9 @@ class FenetreCaptureService : LifecycleService() {
     private var captureGeneration = 0
     private var captureTimeoutRunnable: Runnable? = null
     private var cooldownRunnable: Runnable? = null
+    private var previousSsimSample: SsimSample? = null
+    private var dynamicSsimIntervalSeconds = 0
+    private var lastSsimValue: Double? = null
     private var lastNotification = "Starting"
     private var running = false
 
@@ -75,6 +79,7 @@ class FenetreCaptureService : LifecycleService() {
         storageManager = FenetreStorageManager(storage, cameraSettings)
         overlays = FenetreOverlays(cameraSettings)
         vignetteCorrection = FenetreVignetteCorrection(cameraSettings)
+        ssim = FenetreSsim(cameraSettings)
         sunSchedule = FenetreSunSchedule(cameraSettings)
         createNotificationChannel()
     }
@@ -185,6 +190,8 @@ class FenetreCaptureService : LifecycleService() {
                     selectedCameraId = selectedCameraId,
                     selectedCameraMaxExposureSeconds = selectedCameraMaxExposureSeconds(),
                     selectedCameraVendorMaxExposureSeconds = selectedCameraVendorMaxExposureSeconds(),
+                    ssimValue = lastSsimValue,
+                    ssimIntervalSeconds = effectiveCaptureIntervalSeconds(),
                     storageManagement = storageManager.lastStatus(),
                 )
             }).also { it.start() }
@@ -364,7 +371,7 @@ class FenetreCaptureService : LifecycleService() {
         cameraControl.setZoomRatio(requestedZoom)
     }
 
-    private fun scheduleNextCapture(delayMs: Long = sunSchedule.captureIntervalSeconds() * 1000L) {
+    private fun scheduleNextCapture(delayMs: Long = effectiveCaptureIntervalSeconds() * 1000L) {
         if (!running) {
             return
         }
@@ -466,6 +473,7 @@ class FenetreCaptureService : LifecycleService() {
         val vignetteCorrectionApplied = captureMode == ExposureMode.AUTO &&
             activeNightCaptureStrategy() == NightCaptureStrategy.MANUAL_ADAPTIVE &&
             vignetteCorrection.apply(photoFile)
+        val ssimResult = updateSsim(photoFile)
         overlays.apply(photoFile)
         photoFile.copyTo(storage.latestFile(), overwrite = true)
         daylight.observe(photoFile)
@@ -482,6 +490,7 @@ class FenetreCaptureService : LifecycleService() {
             exposureComposite,
             imageBrightness,
             vignetteCorrectionApplied,
+            ssimResult,
             captureExif,
         )
         if (!pauseForCooldownIfNeeded()) {
@@ -499,10 +508,66 @@ class FenetreCaptureService : LifecycleService() {
         )
         if (modeChanged || nextManualExposure != manualExposureSettings) {
             manualExposureSettings = nextManualExposure
-            mainHandler.post { bindCamera(scheduleDelayMs = sunSchedule.captureIntervalSeconds() * 1000L) }
+            mainHandler.post { bindCamera(scheduleDelayMs = effectiveCaptureIntervalSeconds() * 1000L) }
         } else {
             scheduleNextCapture()
         }
+    }
+
+    private fun updateSsim(photoFile: File): SsimResult {
+        if (!cameraSettings.ssimEnabled()) {
+            lastSsimValue = null
+            return SsimResult(null, cameraSettings.ssimSetpoint(), effectiveCaptureIntervalSeconds(), false)
+        }
+        val currentSample = ssim.sample(photoFile)
+        if (currentSample == null) {
+            return SsimResult(lastSsimValue, cameraSettings.ssimSetpoint(), effectiveCaptureIntervalSeconds(), false)
+        }
+        if (sunSchedule.isSunriseSunsetWindow()) {
+            previousSsimSample = currentSample
+            lastSsimValue = null
+            return SsimResult(null, cameraSettings.ssimSetpoint(), effectiveCaptureIntervalSeconds(), false)
+        }
+        val previousSample = previousSsimSample
+        previousSsimSample = currentSample
+        if (previousSample == null) {
+            dynamicSsimIntervalSeconds = cameraSettings.captureIntervalSeconds()
+                .coerceIn(cameraSettings.ssimMinIntervalSeconds(), cameraSettings.ssimMaxIntervalSeconds())
+            lastSsimValue = null
+            return SsimResult(null, cameraSettings.ssimSetpoint(), effectiveCaptureIntervalSeconds(), false)
+        }
+        val value = ssim.compare(previousSample, currentSample).coerceIn(0.0, 1.0)
+        lastSsimValue = value
+        val setpoint = cameraSettings.ssimSetpoint()
+        val currentInterval = effectiveCaptureIntervalSeconds()
+        dynamicSsimIntervalSeconds = if (value < setpoint) {
+            (currentInterval * cameraSettings.ssimDecreaseFactor())
+                .roundToInt()
+                .coerceAtLeast(cameraSettings.ssimMinIntervalSeconds())
+        } else {
+            (currentInterval + cameraSettings.ssimIncreaseSeconds())
+                .coerceAtMost(cameraSettings.ssimMaxIntervalSeconds())
+        }
+        Log.i(
+            TAG,
+            "SSIM $value target $setpoint interval ${dynamicSsimIntervalSeconds}s"
+        )
+        return SsimResult(value, setpoint, dynamicSsimIntervalSeconds, true)
+    }
+
+    private fun effectiveCaptureIntervalSeconds(): Int {
+        if (sunSchedule.isSunriseSunsetWindow()) {
+            return sunSchedule.captureIntervalSeconds()
+        }
+        if (!cameraSettings.ssimEnabled()) {
+            return cameraSettings.captureIntervalSeconds()
+        }
+        if (dynamicSsimIntervalSeconds <= 0) {
+            dynamicSsimIntervalSeconds = cameraSettings.captureIntervalSeconds()
+                .coerceIn(cameraSettings.ssimMinIntervalSeconds(), cameraSettings.ssimMaxIntervalSeconds())
+        }
+        return dynamicSsimIntervalSeconds
+            .coerceIn(cameraSettings.ssimMinIntervalSeconds(), cameraSettings.ssimMaxIntervalSeconds())
     }
 
     private fun pauseForCooldownIfNeeded(): Boolean {

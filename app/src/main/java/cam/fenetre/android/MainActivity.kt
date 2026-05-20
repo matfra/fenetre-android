@@ -166,6 +166,28 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Capture interval seconds", cameraSettings.captureIntervalSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setCaptureIntervalSeconds)
         })
+        content.addView(settingCheckBox("SSIM adaptive interval", cameraSettings.ssimEnabled()) {
+            cameraSettings.setSsimEnabled(it)
+        })
+        content.addView(settingEditText("SSIM target", cameraSettings.ssimSetpoint().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setSsimSetpoint)
+        })
+        content.addView(settingEditText("SSIM area", cameraSettings.ssimArea()) {
+            cameraSettings.setSsimArea(it)
+        })
+        content.addView(settingEditText("SSIM min interval seconds", cameraSettings.ssimMinIntervalSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setSsimMinIntervalSeconds)
+        })
+        content.addView(settingEditText("SSIM max interval seconds", cameraSettings.ssimMaxIntervalSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setSsimMaxIntervalSeconds)
+        })
+        content.addView(settingEditText("SSIM decrease factor", cameraSettings.ssimDecreaseFactor().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setSsimDecreaseFactor)
+        })
+        content.addView(settingEditText("SSIM increase seconds", cameraSettings.ssimIncreaseSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setSsimIncreaseSeconds)
+        })
+        content.addView(helpText("SSIM compares a post-processed 50x50 grayscale crop before overlays. High similarity grows the interval; scene changes shorten it. Area accepts x1,y1,x2,y2 as ratios or pixels."))
         content.addView(sectionTitle("Daily timelapse"))
         content.addView(dailyTimelapseEncoderGroup())
         content.addView(settingEditText(
