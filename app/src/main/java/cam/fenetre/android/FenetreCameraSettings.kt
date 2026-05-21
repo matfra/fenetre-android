@@ -369,6 +369,15 @@ class FenetreCameraSettings(context: Context) {
             .apply()
     }
 
+    fun nightAdaptiveIsoThreshold(): Int = preferences.getInt(
+        KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD,
+        DEFAULT_NIGHT_ADAPTIVE_ISO_THRESHOLD,
+    ).coerceIn(25, 6400)
+
+    fun setNightAdaptiveIsoThreshold(value: Int) {
+        preferences.edit().putInt(KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD, value.coerceIn(25, 6400)).apply()
+    }
+
     fun manualNightTargetLuma(): Double = preferences.getFloat(
         KEY_MANUAL_NIGHT_TARGET_LUMA,
         DEFAULT_MANUAL_NIGHT_TARGET_LUMA.toFloat(),
@@ -480,6 +489,51 @@ class FenetreCameraSettings(context: Context) {
 
     fun setSsimIncreaseSeconds(value: Int) {
         preferences.edit().putInt(KEY_SSIM_INCREASE_SECONDS, value.coerceIn(0, 3600)).apply()
+    }
+
+    fun starDetectionEnabled(): Boolean = preferences.getBoolean(
+        KEY_STAR_DETECTION_ENABLED,
+        DEFAULT_STAR_DETECTION_ENABLED,
+    )
+
+    fun setStarDetectionEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_STAR_DETECTION_ENABLED, value).apply()
+    }
+
+    fun starCaptureIntervalSeconds(): Int = preferences.getInt(
+        KEY_STAR_CAPTURE_INTERVAL_SECONDS,
+        DEFAULT_STAR_CAPTURE_INTERVAL_SECONDS,
+    ).coerceIn(1, 3600)
+
+    fun setStarCaptureIntervalSeconds(value: Int) {
+        preferences.edit().putInt(KEY_STAR_CAPTURE_INTERVAL_SECONDS, value.coerceIn(1, 3600)).apply()
+    }
+
+    fun starDetectionMinCount(): Int = preferences.getInt(
+        KEY_STAR_DETECTION_MIN_COUNT,
+        DEFAULT_STAR_DETECTION_MIN_COUNT,
+    ).coerceIn(1, 10_000)
+
+    fun setStarDetectionMinCount(value: Int) {
+        preferences.edit().putInt(KEY_STAR_DETECTION_MIN_COUNT, value.coerceIn(1, 10_000)).apply()
+    }
+
+    fun starDetectionThresholdLuma(): Int = preferences.getInt(
+        KEY_STAR_DETECTION_THRESHOLD_LUMA,
+        DEFAULT_STAR_DETECTION_THRESHOLD_LUMA,
+    ).coerceIn(1, 255)
+
+    fun setStarDetectionThresholdLuma(value: Int) {
+        preferences.edit().putInt(KEY_STAR_DETECTION_THRESHOLD_LUMA, value.coerceIn(1, 255)).apply()
+    }
+
+    fun starDetectionMaxBlobPixels(): Int = preferences.getInt(
+        KEY_STAR_DETECTION_MAX_BLOB_PIXELS,
+        DEFAULT_STAR_DETECTION_MAX_BLOB_PIXELS,
+    ).coerceIn(1, 10_000)
+
+    fun setStarDetectionMaxBlobPixels(value: Int) {
+        preferences.edit().putInt(KEY_STAR_DETECTION_MAX_BLOB_PIXELS, value.coerceIn(1, 10_000)).apply()
     }
 
     private fun defaultVignetteCorrectionEnabled(): Boolean {
@@ -634,6 +688,7 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_NIGHT_CAPTURE_STRATEGY = "night_capture_strategy"
         private const val KEY_DAY_EXPOSURE_COMPOSITE_THRESHOLD = "day_exposure_composite_threshold"
         private const val KEY_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD = "night_exposure_composite_threshold"
+        private const val KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD = "night_adaptive_iso_threshold"
         private const val KEY_MANUAL_NIGHT_TARGET_LUMA = "manual_night_target_luma"
         private const val KEY_VIGNETTE_CORRECTION_ENABLED = "vignette_correction_enabled"
         private const val KEY_VIGNETTE_CORRECTION_STRENGTH = "vignette_correction_strength"
@@ -646,6 +701,11 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_SSIM_MAX_INTERVAL_SECONDS = "ssim_max_interval_seconds"
         private const val KEY_SSIM_DECREASE_FACTOR = "ssim_decrease_factor"
         private const val KEY_SSIM_INCREASE_SECONDS = "ssim_increase_seconds"
+        private const val KEY_STAR_DETECTION_ENABLED = "star_detection_enabled"
+        private const val KEY_STAR_CAPTURE_INTERVAL_SECONDS = "star_capture_interval_seconds"
+        private const val KEY_STAR_DETECTION_MIN_COUNT = "star_detection_min_count"
+        private const val KEY_STAR_DETECTION_THRESHOLD_LUMA = "star_detection_threshold_luma"
+        private const val KEY_STAR_DETECTION_MAX_BLOB_PIXELS = "star_detection_max_blob_pixels"
         private const val KEY_FOCUS_INFINITY_ENABLED = "focus_infinity_enabled"
         private const val KEY_LOW_NOISE_ISO = "low_noise_iso"
         private const val KEY_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = "ultra_wide_night_exposure_seconds"
@@ -689,10 +749,11 @@ class FenetreCameraSettings(context: Context) {
         private val DEFAULT_NIGHT_CAPTURE_STRATEGY = NightCaptureStrategy.MANUAL_ADAPTIVE
         private const val DEFAULT_DAY_EXPOSURE_COMPOSITE_THRESHOLD = 1.0
         private const val DEFAULT_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD = 2.0
-        private const val DEFAULT_MANUAL_NIGHT_TARGET_LUMA = 0.12
-        private const val DEFAULT_VIGNETTE_CORRECTION_STRENGTH = 3.5
-        private const val DEFAULT_VIGNETTE_CORRECTION_POWER = 2.0
-        private const val DEFAULT_VIGNETTE_CORRECTION_RADIUS = 0.65
+        private const val DEFAULT_NIGHT_ADAPTIVE_ISO_THRESHOLD = 100
+        private const val DEFAULT_MANUAL_NIGHT_TARGET_LUMA = 0.15
+        private const val DEFAULT_VIGNETTE_CORRECTION_STRENGTH = 0.2
+        private const val DEFAULT_VIGNETTE_CORRECTION_POWER = 1.2
+        private const val DEFAULT_VIGNETTE_CORRECTION_RADIUS = 0.95
         private const val DEFAULT_SSIM_ENABLED = true
         private const val DEFAULT_SSIM_SETPOINT = 0.85
         private const val DEFAULT_SSIM_AREA = "0,0,1,1"
@@ -700,6 +761,11 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_SSIM_MAX_INTERVAL_SECONDS = 90
         private const val DEFAULT_SSIM_DECREASE_FACTOR = 0.9
         private const val DEFAULT_SSIM_INCREASE_SECONDS = 2
+        private const val DEFAULT_STAR_DETECTION_ENABLED = true
+        private const val DEFAULT_STAR_CAPTURE_INTERVAL_SECONDS = 20
+        private const val DEFAULT_STAR_DETECTION_MIN_COUNT = 8
+        private const val DEFAULT_STAR_DETECTION_THRESHOLD_LUMA = 35
+        private const val DEFAULT_STAR_DETECTION_MAX_BLOB_PIXELS = 24
         private const val DEFAULT_FOCUS_INFINITY_ENABLED = true
         private const val DEFAULT_LOW_NOISE_ISO = 100
         private const val DEFAULT_ULTRA_WIDE_NIGHT_EXPOSURE_SECONDS = 25.0

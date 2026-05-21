@@ -65,6 +65,11 @@ class FenetreCaptureService : LifecycleService() {
     private var previousSsimSample: SsimSample? = null
     private var dynamicSsimIntervalSeconds = 0
     private var lastSsimValue: Double? = null
+    private var lastStarsDetected = false
+    private var lastStarCount = 0
+    private var lastSsimSuppressedByStars = false
+    private var lastStarThresholdLuma: Int? = null
+    private var lastStarBackgroundLuma: Int? = null
     private var lastNotification = "Starting"
     private var running = false
 
@@ -192,6 +197,11 @@ class FenetreCaptureService : LifecycleService() {
                     selectedCameraVendorMaxExposureSeconds = selectedCameraVendorMaxExposureSeconds(),
                     ssimValue = lastSsimValue,
                     ssimIntervalSeconds = effectiveCaptureIntervalSeconds(),
+                    starsDetected = lastStarsDetected,
+                    starCount = lastStarCount,
+                    ssimSuppressedByStars = lastSsimSuppressedByStars,
+                    starThresholdLuma = lastStarThresholdLuma,
+                    starBackgroundLuma = lastStarBackgroundLuma,
                     storageManagement = storageManager.lastStatus(),
                 )
             }).also { it.start() }
@@ -517,24 +527,40 @@ class FenetreCaptureService : LifecycleService() {
     private fun updateSsim(photoFile: File): SsimResult {
         if (!cameraSettings.ssimEnabled()) {
             lastSsimValue = null
-            return SsimResult(null, cameraSettings.ssimSetpoint(), effectiveCaptureIntervalSeconds(), false)
+            clearStarDetectionStatus()
+            return ssimResult(null, effectiveCaptureIntervalSeconds(), compared = false)
         }
-        val currentSample = ssim.sample(photoFile)
-        if (currentSample == null) {
-            return SsimResult(lastSsimValue, cameraSettings.ssimSetpoint(), effectiveCaptureIntervalSeconds(), false)
+        val analysis = ssim.analyze(photoFile)
+        if (analysis == null) {
+            return ssimResult(lastSsimValue, effectiveCaptureIntervalSeconds(), compared = false)
         }
+        val currentSample = analysis.sample
+        updateStarDetectionStatus(analysis.starDetection)
         if (sunSchedule.isSunriseSunsetWindow()) {
             previousSsimSample = currentSample
             lastSsimValue = null
-            return SsimResult(null, cameraSettings.ssimSetpoint(), effectiveCaptureIntervalSeconds(), false)
+            lastSsimSuppressedByStars = false
+            return ssimResult(null, effectiveCaptureIntervalSeconds(), compared = false)
         }
+        if (cameraSettings.starDetectionEnabled() && sunSchedule.isNightWindow() && analysis.starDetection.detected) {
+            previousSsimSample = currentSample
+            lastSsimValue = null
+            lastSsimSuppressedByStars = true
+            dynamicSsimIntervalSeconds = cameraSettings.starCaptureIntervalSeconds()
+            Log.i(
+                TAG,
+                "Stars detected count=${analysis.starDetection.count}; suppressing SSIM interval ${dynamicSsimIntervalSeconds}s"
+            )
+            return ssimResult(null, dynamicSsimIntervalSeconds, compared = false)
+        }
+        lastSsimSuppressedByStars = false
         val previousSample = previousSsimSample
         previousSsimSample = currentSample
         if (previousSample == null) {
             dynamicSsimIntervalSeconds = cameraSettings.captureIntervalSeconds()
                 .coerceIn(cameraSettings.ssimMinIntervalSeconds(), cameraSettings.ssimMaxIntervalSeconds())
             lastSsimValue = null
-            return SsimResult(null, cameraSettings.ssimSetpoint(), effectiveCaptureIntervalSeconds(), false)
+            return ssimResult(null, effectiveCaptureIntervalSeconds(), compared = false)
         }
         val value = ssim.compare(previousSample, currentSample).coerceIn(0.0, 1.0)
         lastSsimValue = value
@@ -552,7 +578,7 @@ class FenetreCaptureService : LifecycleService() {
             TAG,
             "SSIM $value target $setpoint interval ${dynamicSsimIntervalSeconds}s"
         )
-        return SsimResult(value, setpoint, dynamicSsimIntervalSeconds, true)
+        return ssimResult(value, dynamicSsimIntervalSeconds, compared = true)
     }
 
     private fun effectiveCaptureIntervalSeconds(): Int {
@@ -562,12 +588,44 @@ class FenetreCaptureService : LifecycleService() {
         if (!cameraSettings.ssimEnabled()) {
             return cameraSettings.captureIntervalSeconds()
         }
+        if (lastSsimSuppressedByStars) {
+            return cameraSettings.starCaptureIntervalSeconds()
+        }
         if (dynamicSsimIntervalSeconds <= 0) {
             dynamicSsimIntervalSeconds = cameraSettings.captureIntervalSeconds()
                 .coerceIn(cameraSettings.ssimMinIntervalSeconds(), cameraSettings.ssimMaxIntervalSeconds())
         }
         return dynamicSsimIntervalSeconds
             .coerceIn(cameraSettings.ssimMinIntervalSeconds(), cameraSettings.ssimMaxIntervalSeconds())
+    }
+
+    private fun updateStarDetectionStatus(result: StarDetectionResult) {
+        lastStarsDetected = result.detected
+        lastStarCount = result.count
+        lastStarThresholdLuma = result.thresholdLuma
+        lastStarBackgroundLuma = result.backgroundLuma
+    }
+
+    private fun clearStarDetectionStatus() {
+        lastStarsDetected = false
+        lastStarCount = 0
+        lastSsimSuppressedByStars = false
+        lastStarThresholdLuma = null
+        lastStarBackgroundLuma = null
+    }
+
+    private fun ssimResult(value: Double?, intervalSeconds: Int, compared: Boolean): SsimResult {
+        return SsimResult(
+            value = value,
+            target = cameraSettings.ssimSetpoint(),
+            intervalSeconds = intervalSeconds,
+            compared = compared,
+            starsDetected = lastStarsDetected,
+            starCount = lastStarCount,
+            suppressedByStars = lastSsimSuppressedByStars,
+            starThresholdLuma = lastStarThresholdLuma,
+            starBackgroundLuma = lastStarBackgroundLuma,
+        )
     }
 
     private fun pauseForCooldownIfNeeded(): Boolean {
@@ -616,12 +674,13 @@ class FenetreCaptureService : LifecycleService() {
         val iso = captureExif.iso ?: return false
         val nextMode = if (adaptiveCaptureMode == ExposureMode.PHONE_AUTO) {
             if (
-                iso > cameraSettings.lowNoiseIso() &&
+                iso > cameraSettings.nightAdaptiveIsoThreshold() &&
                 composite > cameraSettings.nightExposureCompositeThreshold()
             ) {
                 Log.i(
                     TAG,
-                    "Switching to night capture strategy: ISO $iso * exposure = $composite"
+                    "Switching to night capture strategy: ISO $iso > ${cameraSettings.nightAdaptiveIsoThreshold()} " +
+                        "and ISO * exposure = $composite"
                 )
                 ExposureMode.AUTO
             } else {

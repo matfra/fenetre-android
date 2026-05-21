@@ -161,6 +161,7 @@ class FenetreAdminServer(
                 "night_exposure_boost_active": $manualNightBoostActive,
                 "day_exposure_composite_threshold": ${settings.dayExposureCompositeThreshold()},
                 "night_exposure_composite_threshold": ${settings.nightExposureCompositeThreshold()},
+                "night_adaptive_iso_threshold": ${settings.nightAdaptiveIsoThreshold()},
                 "manual_night_target_luma": ${settings.manualNightTargetLuma()},
                 "vignette_correction_enabled": ${settings.vignetteCorrectionEnabled()},
                 "vignette_correction_strength": ${settings.vignetteCorrectionStrength()},
@@ -180,7 +181,17 @@ class FenetreAdminServer(
                 "ssim_min_interval_seconds": ${settings.ssimMinIntervalSeconds()},
                 "ssim_max_interval_seconds": ${settings.ssimMaxIntervalSeconds()},
                 "ssim_decrease_factor": ${settings.ssimDecreaseFactor()},
-                "ssim_increase_seconds": ${settings.ssimIncreaseSeconds()}
+                "ssim_increase_seconds": ${settings.ssimIncreaseSeconds()},
+                "star_detection_enabled": ${settings.starDetectionEnabled()},
+                "star_capture_interval_seconds": ${settings.starCaptureIntervalSeconds()},
+                "star_detection_min_count": ${settings.starDetectionMinCount()},
+                "star_detection_threshold_luma": ${settings.starDetectionThresholdLuma()},
+                "star_detection_max_blob_pixels": ${settings.starDetectionMaxBlobPixels()},
+                "stars_detected": ${runtime.starsDetected},
+                "star_count": ${runtime.starCount},
+                "ssim_suppressed_by_stars": ${runtime.ssimSuppressedByStars},
+                "star_threshold_luma": ${runtime.starThresholdLuma ?: "null"},
+                "star_background_luma": ${runtime.starBackgroundLuma ?: "null"}
               },
               "exposure": {
                 "configured_max_exposure_seconds": ${settings.maxExposureSeconds(runtime.lensMode)},
@@ -326,6 +337,15 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_ssim_enabled Whether SSIM adaptive interval is enabled.")
             appendLine("# TYPE fenetre_android_ssim_enabled gauge")
             appendLine("fenetre_android_ssim_enabled{$cameraLabels} ${if (settings.ssimEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_android_star_count Latest star count in the SSIM area.")
+            appendLine("# TYPE fenetre_android_star_count gauge")
+            appendLine("fenetre_android_star_count{$cameraLabels} ${runtime.starCount}")
+            appendLine("# HELP fenetre_android_stars_detected Whether stars were detected in the latest capture.")
+            appendLine("# TYPE fenetre_android_stars_detected gauge")
+            appendLine("fenetre_android_stars_detected{$cameraLabels} ${if (runtime.starsDetected) 1 else 0}")
+            appendLine("# HELP fenetre_android_ssim_suppressed_by_stars Whether stars are currently suppressing SSIM interval adaptation.")
+            appendLine("# TYPE fenetre_android_ssim_suppressed_by_stars gauge")
+            appendLine("fenetre_android_ssim_suppressed_by_stars{$cameraLabels} ${if (runtime.ssimSuppressedByStars) 1 else 0}")
             appendLine("# HELP fenetre_android_daily_timelapse_encoder_mode Configured daily timelapse encoder mode as labeled one-hot gauges.")
             appendLine("# TYPE fenetre_android_daily_timelapse_encoder_mode gauge")
             DailyTimelapseEncoderMode.entries.forEach { mode ->
@@ -358,6 +378,9 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_manual_night_target_luma Configured average luma target for manual adaptive night exposure.")
             appendLine("# TYPE fenetre_android_manual_night_target_luma gauge")
             appendLine("fenetre_android_manual_night_target_luma{$cameraLabels} ${settings.manualNightTargetLuma()}")
+            appendLine("# HELP fenetre_android_night_adaptive_iso_threshold Phone-auto ISO threshold for switching to manual adaptive night capture.")
+            appendLine("# TYPE fenetre_android_night_adaptive_iso_threshold gauge")
+            appendLine("fenetre_android_night_adaptive_iso_threshold{$cameraLabels} ${settings.nightAdaptiveIsoThreshold()}")
             appendLine("# HELP fenetre_android_vignette_correction_enabled Whether radial vignette correction is enabled.")
             appendLine("# TYPE fenetre_android_vignette_correction_enabled gauge")
             appendLine("fenetre_android_vignette_correction_enabled{$cameraLabels} ${if (settings.vignetteCorrectionEnabled()) 1 else 0}")
@@ -769,6 +792,11 @@ data class FenetreRuntimeStatus(
     val selectedCameraVendorMaxExposureSeconds: Double? = null,
     val ssimValue: Double? = null,
     val ssimIntervalSeconds: Int = 0,
+    val starsDetected: Boolean = false,
+    val starCount: Int = 0,
+    val ssimSuppressedByStars: Boolean = false,
+    val starThresholdLuma: Int? = null,
+    val starBackgroundLuma: Int? = null,
     val storageManagement: StorageManagementStatus = StorageManagementStatus.empty(File(".")),
 )
 

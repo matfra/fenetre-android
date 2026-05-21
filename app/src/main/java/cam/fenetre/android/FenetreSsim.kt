@@ -2,31 +2,34 @@ package cam.fenetre.android
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
 import android.util.Log
 import java.io.File
+import java.util.ArrayDeque
+import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 class FenetreSsim(private val settings: FenetreCameraSettings) {
-    fun sample(file: File): SsimSample? {
+    fun analyze(file: File): SsimAnalysis? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
             return null
         }
         val crop = cropRect(bounds.outWidth, bounds.outHeight) ?: return null
-        val options = BitmapFactory.Options()
-        val decoded = BitmapFactory.decodeFile(file.absolutePath, options) ?: return null
-        val scaled = Bitmap.createBitmap(SAMPLE_SIZE, SAMPLE_SIZE, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(scaled)
-        canvas.drawBitmap(decoded, crop, Rect(0, 0, SAMPLE_SIZE, SAMPLE_SIZE), null)
+        val decoded = BitmapFactory.decodeFile(file.absolutePath) ?: return null
+        val starDetection = countStars(decoded, crop)
+        val scaled = Bitmap.createBitmap(SSIM_SAMPLE_SIZE, SSIM_SAMPLE_SIZE, Bitmap.Config.ARGB_8888)
+        Canvas(scaled).drawBitmap(decoded, crop, Rect(0, 0, SSIM_SAMPLE_SIZE, SSIM_SAMPLE_SIZE), null)
         decoded.recycle()
 
-        val luma = DoubleArray(SAMPLE_SIZE * SAMPLE_SIZE)
+        val luma = DoubleArray(SSIM_SAMPLE_SIZE * SSIM_SAMPLE_SIZE)
         var index = 0
-        for (y in 0 until SAMPLE_SIZE) {
-            for (x in 0 until SAMPLE_SIZE) {
+        for (y in 0 until SSIM_SAMPLE_SIZE) {
+            for (x in 0 until SSIM_SAMPLE_SIZE) {
                 val pixel = scaled.getPixel(x, y)
                 luma[index++] = 0.2126 * Color.red(pixel) +
                     0.7152 * Color.green(pixel) +
@@ -34,7 +37,7 @@ class FenetreSsim(private val settings: FenetreCameraSettings) {
             }
         }
         scaled.recycle()
-        return SsimSample(luma)
+        return SsimAnalysis(SsimSample(luma), starDetection)
     }
 
     fun compare(previous: SsimSample, current: SsimSample): Double {
@@ -66,6 +69,82 @@ class FenetreSsim(private val settings: FenetreCameraSettings) {
             ((meanX * meanX + meanY * meanY + c1) * (varianceX + varianceY + c2))
     }
 
+    private fun countStars(decoded: Bitmap, crop: Rect): StarDetectionResult {
+        val scale = min(
+            MAX_STAR_ANALYSIS_SIZE.toDouble() / crop.width().toDouble(),
+            MAX_STAR_ANALYSIS_SIZE.toDouble() / crop.height().toDouble(),
+        ).coerceAtMost(1.0)
+        val width = (crop.width() * scale).roundToInt().coerceAtLeast(1)
+        val height = (crop.height() * scale).roundToInt().coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).drawBitmap(decoded, crop, Rect(0, 0, width, height), null)
+
+        val luma = IntArray(width * height)
+        var index = 0
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val pixel = bitmap.getPixel(x, y)
+                luma[index++] = (
+                    0.2126 * Color.red(pixel) +
+                        0.7152 * Color.green(pixel) +
+                        0.0722 * Color.blue(pixel)
+                    ).roundToInt()
+            }
+        }
+        bitmap.recycle()
+
+        val sorted = luma.copyOf()
+        sorted.sort()
+        val background = sorted[sorted.size / 2]
+        val threshold = (background + settings.starDetectionThresholdLuma()).coerceAtMost(255)
+        val visited = BooleanArray(luma.size)
+        val queue = ArrayDeque<Int>()
+        var starCount = 0
+        for (start in luma.indices) {
+            if (visited[start] || luma[start] < threshold) {
+                continue
+            }
+            visited[start] = true
+            queue.clear()
+            queue.add(start)
+            var area = 0
+            var touchesEdge = false
+            while (!queue.isEmpty()) {
+                val point = queue.removeFirst()
+                area += 1
+                val x = point % width
+                val y = point / width
+                touchesEdge = touchesEdge || x == 0 || y == 0 || x == width - 1 || y == height - 1
+                for (dy in -1..1) {
+                    for (dx in -1..1) {
+                        if (dx == 0 && dy == 0) {
+                            continue
+                        }
+                        val nx = x + dx
+                        val ny = y + dy
+                        if (nx !in 0 until width || ny !in 0 until height) {
+                            continue
+                        }
+                        val neighbor = ny * width + nx
+                        if (!visited[neighbor] && luma[neighbor] >= threshold) {
+                            visited[neighbor] = true
+                            queue.add(neighbor)
+                        }
+                    }
+                }
+            }
+            if (!touchesEdge && area in 1..settings.starDetectionMaxBlobPixels()) {
+                starCount += 1
+            }
+        }
+        return StarDetectionResult(
+            count = starCount,
+            detected = starCount >= settings.starDetectionMinCount(),
+            thresholdLuma = threshold,
+            backgroundLuma = background,
+        )
+    }
+
     private fun cropRect(width: Int, height: Int): Rect? {
         val values = settings.ssimArea().split(",").mapNotNull { it.trim().toDoubleOrNull() }
         if (values.size != 4) {
@@ -91,10 +170,16 @@ class FenetreSsim(private val settings: FenetreCameraSettings) {
     }
 
     companion object {
-        private const val SAMPLE_SIZE = 50
+        private const val SSIM_SAMPLE_SIZE = 50
+        private const val MAX_STAR_ANALYSIS_SIZE = 500
         private const val TAG = "FenetreSsim"
     }
 }
+
+data class SsimAnalysis(
+    val sample: SsimSample,
+    val starDetection: StarDetectionResult,
+)
 
 data class SsimSample(val luma: DoubleArray)
 
@@ -103,4 +188,16 @@ data class SsimResult(
     val target: Double,
     val intervalSeconds: Int,
     val compared: Boolean,
+    val starsDetected: Boolean,
+    val starCount: Int,
+    val suppressedByStars: Boolean,
+    val starThresholdLuma: Int?,
+    val starBackgroundLuma: Int?,
+)
+
+data class StarDetectionResult(
+    val count: Int,
+    val detected: Boolean,
+    val thresholdLuma: Int,
+    val backgroundLuma: Int,
 )

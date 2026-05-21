@@ -79,6 +79,12 @@ target, the next interval is shortened by the decrease factor. If it is above
 target, the interval grows by the configured number of seconds, bounded by the
 configured min/max interval. Sunrise/sunset fast mode takes precedence.
 
+When star detection is enabled, the app also analyzes small bright connected
+components in the selected SSIM area before the crop is resampled to `50x50`.
+If enough stars are detected in the night window, SSIM interval adaptation is
+suppressed and the configurable star interval is used instead. The default star
+interval is `20` seconds.
+
 ## Tested Devices
 
 | Device | Tested lens | Day mode | Recommended night mode | Notes |

@@ -34,6 +34,10 @@ class FenetreSunSchedule(private val settings: FenetreCameraSettings) {
         if (settings.nightExposureBoostStops() <= 0.0) {
             return false
         }
+        return isNightWindow(now)
+    }
+
+    fun isNightWindow(now: ZonedDateTime = now()): Boolean {
         val sunWindow = sunWindowFor(now) ?: return false
         val buffer = settings.nightExposureBoostTwilightBufferMinutes().toLong()
         return now < sunWindow.sunrise.minusMinutes(buffer) || now > sunWindow.sunset.plusMinutes(buffer)

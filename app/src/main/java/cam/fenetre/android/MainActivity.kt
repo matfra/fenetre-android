@@ -187,7 +187,22 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("SSIM increase seconds", cameraSettings.ssimIncreaseSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setSsimIncreaseSeconds)
         })
-        content.addView(helpText("SSIM compares a post-processed 50x50 grayscale crop before overlays. High similarity grows the interval; scene changes shorten it. Area accepts x1,y1,x2,y2 as ratios or pixels."))
+        content.addView(settingCheckBox("Disable SSIM when stars are detected", cameraSettings.starDetectionEnabled()) {
+            cameraSettings.setStarDetectionEnabled(it)
+        })
+        content.addView(settingEditText("Star interval seconds", cameraSettings.starCaptureIntervalSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setStarCaptureIntervalSeconds)
+        })
+        content.addView(settingEditText("Star detection min count", cameraSettings.starDetectionMinCount().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setStarDetectionMinCount)
+        })
+        content.addView(settingEditText("Star threshold luma", cameraSettings.starDetectionThresholdLuma().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setStarDetectionThresholdLuma)
+        })
+        content.addView(settingEditText("Star max blob pixels", cameraSettings.starDetectionMaxBlobPixels().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setStarDetectionMaxBlobPixels)
+        })
+        content.addView(helpText("SSIM compares a post-processed 50x50 grayscale crop before overlays. Star detection counts small bright blobs in the selected SSIM area before that 50x50 resample and uses the star interval at night."))
         content.addView(sectionTitle("Daily timelapse"))
         content.addView(dailyTimelapseEncoderGroup())
         content.addView(settingEditText(
@@ -280,7 +295,10 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Night composite threshold", cameraSettings.nightExposureCompositeThreshold().toString(), decimalInputType()) {
             it.toDoubleOrNull()?.let(cameraSettings::setNightExposureCompositeThreshold)
         })
-        content.addView(helpText("Exposure composite is ISO times shutter seconds. Phone auto switches to manual adaptive above the night threshold when ISO rises over the cap; manual adaptive switches back below the day threshold."))
+        content.addView(settingEditText("Night adaptive ISO threshold", cameraSettings.nightAdaptiveIsoThreshold().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setNightAdaptiveIsoThreshold)
+        })
+        content.addView(helpText("Exposure composite is ISO times shutter seconds. Phone auto switches to manual adaptive above the night threshold when ISO rises over this threshold; manual adaptive switches back below the day threshold."))
         content.addView(settingEditText("Manual night target brightness", cameraSettings.manualNightTargetLuma().toString(), decimalInputType()) {
             it.toDoubleOrNull()?.let(cameraSettings::setManualNightTargetLuma)
         })
