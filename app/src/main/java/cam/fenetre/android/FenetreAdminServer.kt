@@ -1,6 +1,7 @@
 package cam.fenetre.android
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
@@ -256,12 +257,11 @@ class FenetreAdminServer(
         val fileStatus = fileStatus()
         val storageManagement = runtime.storageManagement
         val systemMetrics = systemMetrics()
+        val latestPictureMetrics = latestPictureMetrics()
         val now = System.currentTimeMillis()
         val ageSeconds = fileStatus.metadataCapturedAtMs?.let { maxOf(0L, (now - it) / 1000L) }
         val camera2NightSceneAvailable = camera2NightSceneAvailable()
-        val activeNightStrategy = runtime.activeNightCaptureStrategy
-        val manualNightBoostActive = false
-        val cameraLabels = """camera_name="${prometheusLabelValue(settings.cameraName())}""""
+        val cameraLabels = """camera_name="${prometheusLabelValue(settings.cameraName())}",platform="android""""
         val storageLabels = """device="android_app_data",fstype="app_data",mountpoint="${rootDir.absolutePath}""""
         val unameLabels = listOf(
             "domainname" to "(none)",
@@ -272,130 +272,169 @@ class FenetreAdminServer(
             "version" to "SDK ${Build.VERSION.SDK_INT} ${Build.FINGERPRINT ?: "unknown"}",
         ).joinToString(",") { (key, value) -> """$key="${prometheusLabelValue(value)}"""" }
         return buildString {
-            appendLine("# HELP fenetre_android_service_running Whether the Android capture service is running.")
-            appendLine("# TYPE fenetre_android_service_running gauge")
-            appendLine("fenetre_android_service_running{$cameraLabels} ${if (runtime.running) 1 else 0}")
-            appendLine("# HELP fenetre_android_capture_in_progress Whether a still capture is currently in progress.")
-            appendLine("# TYPE fenetre_android_capture_in_progress gauge")
-            appendLine("fenetre_android_capture_in_progress{$cameraLabels} ${if (runtime.captureInProgress) 1 else 0}")
-            appendLine("# HELP fenetre_android_thermal_paused Whether capture and timelapse scheduling are paused for cooldown.")
-            appendLine("# TYPE fenetre_android_thermal_paused gauge")
-            appendLine("fenetre_android_thermal_paused{$cameraLabels} ${if (runtime.thermalPaused) 1 else 0}")
-            appendLine("# HELP fenetre_android_latest_capture_age_seconds Age of the latest captured frame.")
-            appendLine("# TYPE fenetre_android_latest_capture_age_seconds gauge")
-            appendLine("fenetre_android_latest_capture_age_seconds{$cameraLabels} ${ageSeconds ?: -1}")
-            appendLine("# HELP fenetre_android_latest_image_bytes Size of latest.jpg.")
-            appendLine("# TYPE fenetre_android_latest_image_bytes gauge")
-            appendLine("fenetre_android_latest_image_bytes{$cameraLabels} ${fileStatus.latestImageBytes}")
+            appendLine("# HELP fenetre_camera_online Camera online status reported by the capture service.")
+            appendLine("# TYPE fenetre_camera_online gauge")
+            appendLine("fenetre_camera_online{$cameraLabels} ${if (runtime.running) 1 else 0}")
+            appendLine("# HELP fenetre_service_running Whether the capture service is running.")
+            appendLine("# TYPE fenetre_service_running gauge")
+            appendLine("fenetre_service_running{$cameraLabels} ${if (runtime.running) 1 else 0}")
+            appendLine("# HELP fenetre_capture_in_progress Whether a still capture is currently in progress.")
+            appendLine("# TYPE fenetre_capture_in_progress gauge")
+            appendLine("fenetre_capture_in_progress{$cameraLabels} ${if (runtime.captureInProgress) 1 else 0}")
+            appendLine("# HELP fenetre_thermal_paused Whether capture and timelapse scheduling are paused for cooldown.")
+            appendLine("# TYPE fenetre_thermal_paused gauge")
+            appendLine("fenetre_thermal_paused{$cameraLabels} ${if (runtime.thermalPaused) 1 else 0}")
+            appendLine("# HELP fenetre_latest_capture_age_seconds Age of the latest captured frame.")
+            appendLine("# TYPE fenetre_latest_capture_age_seconds gauge")
+            appendLine("fenetre_latest_capture_age_seconds{$cameraLabels} ${ageSeconds ?: -1}")
+            appendLine("# HELP fenetre_pictures_taken_total Total number of pictures taken by this service process.")
+            appendLine("# TYPE fenetre_pictures_taken_total counter")
+            appendLine("fenetre_pictures_taken_total{$cameraLabels} ${runtime.picturesTakenTotal}")
+            appendLine("# HELP fenetre_capture_failures_total Total number of capture failures by this service process.")
+            appendLine("# TYPE fenetre_capture_failures_total counter")
+            appendLine("fenetre_capture_failures_total{$cameraLabels} ${runtime.captureFailuresTotal}")
+            appendLine("# HELP fenetre_capture_last_success_timestamp Timestamp of the last successfully taken picture.")
+            appendLine("# TYPE fenetre_capture_last_success_timestamp gauge")
+            appendLine("fenetre_capture_last_success_timestamp{$cameraLabels} ${fileStatus.metadataCapturedAtMs?.let { it / 1000.0 } ?: -1.0}")
+            appendLine("# HELP fenetre_picture_size_bytes Size of the latest captured picture in bytes.")
+            appendLine("# TYPE fenetre_picture_size_bytes gauge")
+            appendLine("fenetre_picture_size_bytes{$cameraLabels} ${fileStatus.latestImageBytes}")
+            appendLine("# HELP fenetre_picture_width_pixels Width of the latest captured picture in pixels.")
+            appendLine("# TYPE fenetre_picture_width_pixels gauge")
+            appendLine("fenetre_picture_width_pixels{$cameraLabels} ${latestPictureMetrics.widthPixels ?: -1}")
+            appendLine("# HELP fenetre_picture_height_pixels Height of the latest captured picture in pixels.")
+            appendLine("# TYPE fenetre_picture_height_pixels gauge")
+            appendLine("fenetre_picture_height_pixels{$cameraLabels} ${latestPictureMetrics.heightPixels ?: -1}")
+            appendLine("# HELP fenetre_picture_iso ISO value of the latest captured picture.")
+            appendLine("# TYPE fenetre_picture_iso gauge")
+            appendLine("fenetre_picture_iso{$cameraLabels} ${latestPictureMetrics.iso ?: -1}")
+            appendLine("# HELP fenetre_picture_exposure_time_seconds Exposure time of the latest captured picture in seconds.")
+            appendLine("# TYPE fenetre_picture_exposure_time_seconds gauge")
+            appendLine("fenetre_picture_exposure_time_seconds{$cameraLabels} ${latestPictureMetrics.exposureTimeSeconds ?: -1.0}")
+            appendLine("# HELP fenetre_capture_processing_time_seconds Time it took to capture and process the latest picture.")
+            appendLine("# TYPE fenetre_capture_processing_time_seconds gauge")
+            appendLine("fenetre_capture_processing_time_seconds{$cameraLabels} ${runtime.captureProcessingTimeSeconds ?: -1.0}")
+            appendLine("# HELP fenetre_capture_loop_sleep_time_seconds Time the camera sleeps between pictures.")
+            appendLine("# TYPE fenetre_capture_loop_sleep_time_seconds gauge")
+            appendLine("fenetre_capture_loop_sleep_time_seconds{$cameraLabels} ${runtime.ssimIntervalSeconds}")
+            appendLine("# HELP fenetre_capture_interval_seconds Configured capture interval.")
+            appendLine("# TYPE fenetre_capture_interval_seconds gauge")
+            appendLine("fenetre_capture_interval_seconds{$cameraLabels} ${settings.captureIntervalSeconds()}")
+            appendLine("# HELP fenetre_ssim_value Latest SSIM measurement.")
+            appendLine("# TYPE fenetre_ssim_value gauge")
+            appendLine("fenetre_ssim_value{$cameraLabels} ${runtime.ssimValue ?: -1.0}")
+            appendLine("# HELP fenetre_ssim_target Configured SSIM target.")
+            appendLine("# TYPE fenetre_ssim_target gauge")
+            appendLine("fenetre_ssim_target{$cameraLabels} ${settings.ssimSetpoint()}")
+            appendLine("# HELP fenetre_ssim_enabled Whether SSIM adaptive interval is enabled.")
+            appendLine("# TYPE fenetre_ssim_enabled gauge")
+            appendLine("fenetre_ssim_enabled{$cameraLabels} ${if (settings.ssimEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_star_count Latest star count in the SSIM area.")
+            appendLine("# TYPE fenetre_star_count gauge")
+            appendLine("fenetre_star_count{$cameraLabels} ${runtime.starCount}")
+            appendLine("# HELP fenetre_stars_detected Whether stars were detected in the latest capture.")
+            appendLine("# TYPE fenetre_stars_detected gauge")
+            appendLine("fenetre_stars_detected{$cameraLabels} ${if (runtime.starsDetected) 1 else 0}")
+            appendLine("# HELP fenetre_ssim_suppressed_by_stars Whether stars are currently suppressing SSIM interval adaptation.")
+            appendLine("# TYPE fenetre_ssim_suppressed_by_stars gauge")
+            appendLine("fenetre_ssim_suppressed_by_stars{$cameraLabels} ${if (runtime.ssimSuppressedByStars) 1 else 0}")
+            appendLine("# HELP fenetre_camera_mode Current camera mode with mode label.")
+            appendLine("# TYPE fenetre_camera_mode gauge")
+            val fenetreMode = when {
+                !runtime.running -> "unknown"
+                runtime.captureMode == ExposureMode.PHONE_AUTO -> "day"
+                runtime.starsDetected -> "astro"
+                else -> "night"
+            }
+            listOf("unknown", "day", "night", "astro").forEach { mode ->
+                appendLine("""fenetre_camera_mode{$cameraLabels,mode="$mode"} ${if (fenetreMode == mode) 1 else 0}""")
+            }
+            appendLine("# HELP fenetre_storage_work_dir_size_bytes Size of the Android app fenetre data directory in bytes.")
+            appendLine("# TYPE fenetre_storage_work_dir_size_bytes gauge")
+            appendLine("fenetre_storage_work_dir_size_bytes{$cameraLabels} ${storageManagement.sizeBytes}")
+            appendLine("# HELP fenetre_storage_camera_directory_size_bytes Size of this camera directory in bytes.")
+            appendLine("# TYPE fenetre_storage_camera_directory_size_bytes gauge")
+            appendLine("fenetre_storage_camera_directory_size_bytes{$cameraLabels} ${cameraDirSizeBytes()}")
+            appendLine("# HELP fenetre_storage_day_directories_total Total number of day directories.")
+            appendLine("# TYPE fenetre_storage_day_directories_total gauge")
+            appendLine("fenetre_storage_day_directories_total{$cameraLabels} ${storageManagement.dayDirectoryCount}")
+            appendLine("# HELP fenetre_storage_day_directories_archived Number of archived day directories.")
+            appendLine("# TYPE fenetre_storage_day_directories_archived gauge")
+            appendLine("fenetre_storage_day_directories_archived{$cameraLabels} ${storageManagement.archivedDayDirectoryCount}")
+            appendLine("# HELP fenetre_storage_day_directories_timelapse Number of day directories with a daily timelapse.")
+            appendLine("# TYPE fenetre_storage_day_directories_timelapse gauge")
+            appendLine("fenetre_storage_day_directories_timelapse{$cameraLabels} ${storageManagement.timelapseDayDirectoryCount}")
+            appendLine("# HELP fenetre_storage_day_directories_daylight Number of day directories with daylight output.")
+            appendLine("# TYPE fenetre_storage_day_directories_daylight gauge")
+            appendLine("fenetre_storage_day_directories_daylight{$cameraLabels} ${storageManagement.daylightDayDirectoryCount}")
+            appendLine("# HELP fenetre_timelapses_created_total Number of timelapse artifacts present on disk.")
+            appendLine("# TYPE fenetre_timelapses_created_total counter")
+            appendLine("""fenetre_timelapses_created_total{$cameraLabels,type="daily"} ${dailyTimelapseCount()}""")
+            appendLine("# HELP fenetre_timelapse_queue_size Number of timelapse jobs currently queued.")
+            appendLine("# TYPE fenetre_timelapse_queue_size gauge")
+            appendLine("fenetre_timelapse_queue_size{$cameraLabels} 0")
+            appendLine("# HELP fenetre_daily_timelapse_encoder_mode Configured daily timelapse encoder mode as labeled one-hot gauges.")
+            appendLine("# TYPE fenetre_daily_timelapse_encoder_mode gauge")
+            DailyTimelapseEncoderMode.entries.forEach { mode ->
+                appendLine("""fenetre_daily_timelapse_encoder_mode{$cameraLabels,mode="${prometheusLabelValue(mode.name.lowercase())}"} ${if (settings.dailyTimelapseEncoderMode() == mode) 1 else 0}""")
+            }
+            appendLine("# HELP fenetre_daily_vp9_bitrate_bits_per_second Configured VP9 daily timelapse target bitrate.")
+            appendLine("# TYPE fenetre_daily_vp9_bitrate_bits_per_second gauge")
+            appendLine("fenetre_daily_vp9_bitrate_bits_per_second{$cameraLabels} ${settings.dailyVp9BitrateBitsPerSecond()}")
+            appendLine("# HELP fenetre_cooldown_battery_temperature_celsius Configured battery temperature threshold for cooldown.")
+            appendLine("# TYPE fenetre_cooldown_battery_temperature_celsius gauge")
+            appendLine("fenetre_cooldown_battery_temperature_celsius{$cameraLabels} ${settings.cooldownBatteryTemperatureCelsius()}")
+            appendLine("# HELP fenetre_cooldown_enabled Whether thermal cooldown protection is enabled.")
+            appendLine("# TYPE fenetre_cooldown_enabled gauge")
+            appendLine("fenetre_cooldown_enabled{$cameraLabels} ${if (settings.cooldownEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_sunrise_sunset_fast_enabled Whether fast sunrise/sunset capture is enabled.")
+            appendLine("# TYPE fenetre_sunrise_sunset_fast_enabled gauge")
+            appendLine("fenetre_sunrise_sunset_fast_enabled{$cameraLabels} ${if (settings.sunriseSunsetFastEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_sunrise_sunset_fast_active Whether the current time is in a fast sunrise/sunset window.")
+            appendLine("# TYPE fenetre_sunrise_sunset_fast_active gauge")
+            appendLine("fenetre_sunrise_sunset_fast_active{$cameraLabels} ${if (sunSchedule.isSunriseSunsetWindow()) 1 else 0}")
+            appendLine("# HELP fenetre_manual_night_target_luma Configured average luma target for manual adaptive night exposure.")
+            appendLine("# TYPE fenetre_manual_night_target_luma gauge")
+            appendLine("fenetre_manual_night_target_luma{$cameraLabels} ${settings.manualNightTargetLuma()}")
+            appendLine("# HELP fenetre_manual_to_auto_luma_margin Luma hysteresis margin for switching from manual adaptive back to phone auto.")
+            appendLine("# TYPE fenetre_manual_to_auto_luma_margin gauge")
+            appendLine("fenetre_manual_to_auto_luma_margin{$cameraLabels} ${settings.manualToAutoLumaMargin()}")
+            appendLine("# HELP fenetre_vignette_correction_enabled Whether radial vignette correction is enabled.")
+            appendLine("# TYPE fenetre_vignette_correction_enabled gauge")
+            appendLine("fenetre_vignette_correction_enabled{$cameraLabels} ${if (settings.vignetteCorrectionEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_vignette_correction_strength Configured radial vignette correction strength.")
+            appendLine("# TYPE fenetre_vignette_correction_strength gauge")
+            appendLine("fenetre_vignette_correction_strength{$cameraLabels} ${settings.vignetteCorrectionStrength()}")
+            appendLine("# HELP fenetre_camera2_night_scene_available Whether Camera2 advertises night scene mode.")
+            appendLine("# TYPE fenetre_camera2_night_scene_available gauge")
+            appendLine("fenetre_camera2_night_scene_available{$cameraLabels} ${if (camera2NightSceneAvailable) 1 else 0}")
+            appendLine("# HELP fenetre_camerax_night_extension_available Whether CameraX advertises the night extension.")
+            appendLine("# TYPE fenetre_camerax_night_extension_available gauge")
+            appendLine("fenetre_camerax_night_extension_available{$cameraLabels} ${if (runtime.cameraXNightExtensionAvailable) 1 else 0}")
+            appendLine("# HELP fenetre_system_cpu_usage_percent System CPU usage since the previous scrape.")
+            appendLine("# TYPE fenetre_system_cpu_usage_percent gauge")
+            appendLine("fenetre_system_cpu_usage_percent{$cameraLabels} ${systemMetrics.cpuUsagePercent ?: -1.0}")
+            appendLine("# HELP fenetre_process_cpu_usage_percent App process CPU usage since the previous scrape, normalized across CPU cores.")
+            appendLine("# TYPE fenetre_process_cpu_usage_percent gauge")
+            appendLine("fenetre_process_cpu_usage_percent{$cameraLabels} ${systemMetrics.processCpuUsagePercent ?: -1.0}")
+            appendLine("# HELP fenetre_process_memory_pss_bytes App process proportional set size.")
+            appendLine("# TYPE fenetre_process_memory_pss_bytes gauge")
+            appendLine("fenetre_process_memory_pss_bytes{$cameraLabels} ${systemMetrics.processMemoryPssBytes ?: -1}")
+            appendLine("# HELP fenetre_runtime_heap_used_bytes App runtime heap bytes currently used.")
+            appendLine("# TYPE fenetre_runtime_heap_used_bytes gauge")
+            appendLine("fenetre_runtime_heap_used_bytes{$cameraLabels} ${systemMetrics.runtimeHeapUsedBytes}")
+            appendLine("# HELP fenetre_runtime_heap_max_bytes App runtime max heap bytes.")
+            appendLine("# TYPE fenetre_runtime_heap_max_bytes gauge")
+            appendLine("fenetre_runtime_heap_max_bytes{$cameraLabels} ${systemMetrics.runtimeHeapMaxBytes}")
             appendLine("# HELP node_filesystem_avail_bytes Filesystem space available to non-root users in bytes.")
             appendLine("# TYPE node_filesystem_avail_bytes gauge")
             appendLine("node_filesystem_avail_bytes{$storageLabels} ${rootDir.freeSpace}")
+            appendLine("# HELP node_filesystem_free_bytes Filesystem free space in bytes.")
+            appendLine("# TYPE node_filesystem_free_bytes gauge")
+            appendLine("node_filesystem_free_bytes{$storageLabels} ${rootDir.freeSpace}")
             appendLine("# HELP node_filesystem_size_bytes Filesystem size in bytes.")
             appendLine("# TYPE node_filesystem_size_bytes gauge")
             appendLine("node_filesystem_size_bytes{$storageLabels} ${rootDir.totalSpace}")
-            appendLine("# HELP fenetre_android_storage_management_enabled Whether storage management is enabled.")
-            appendLine("# TYPE fenetre_android_storage_management_enabled gauge")
-            appendLine("fenetre_android_storage_management_enabled{$cameraLabels} ${if (settings.storageManagementEnabled()) 1 else 0}")
-            appendLine("# HELP fenetre_android_storage_management_dry_run Whether storage management is configured for dry-run mode.")
-            appendLine("# TYPE fenetre_android_storage_management_dry_run gauge")
-            appendLine("fenetre_android_storage_management_dry_run{$cameraLabels} ${if (settings.storageManagementDryRun()) 1 else 0}")
-            appendLine("# HELP fenetre_android_storage_management_in_progress Whether a storage management pass is running.")
-            appendLine("# TYPE fenetre_android_storage_management_in_progress gauge")
-            appendLine("fenetre_android_storage_management_in_progress{$cameraLabels} ${if (storageManagement.inProgress) 1 else 0}")
-            appendLine("# HELP fenetre_android_storage_management_size_bytes App fenetre data directory size.")
-            appendLine("# TYPE fenetre_android_storage_management_size_bytes gauge")
-            appendLine("fenetre_android_storage_management_size_bytes{$cameraLabels} ${storageManagement.sizeBytes}")
-            appendLine("# HELP fenetre_android_storage_management_max_bytes Configured app fenetre data directory size limit.")
-            appendLine("# TYPE fenetre_android_storage_management_max_bytes gauge")
-            appendLine("fenetre_android_storage_management_max_bytes{$cameraLabels} ${storageManagement.maxBytes}")
-            appendLine("# HELP fenetre_android_storage_day_directories_total Number of day directories by state.")
-            appendLine("# TYPE fenetre_android_storage_day_directories_total gauge")
-            appendLine("""fenetre_android_storage_day_directories_total{$cameraLabels,state="all"} ${storageManagement.dayDirectoryCount}""")
-            appendLine("""fenetre_android_storage_day_directories_total{$cameraLabels,state="archived"} ${storageManagement.archivedDayDirectoryCount}""")
-            appendLine("""fenetre_android_storage_day_directories_total{$cameraLabels,state="timelapse"} ${storageManagement.timelapseDayDirectoryCount}""")
-            appendLine("""fenetre_android_storage_day_directories_total{$cameraLabels,state="daylight"} ${storageManagement.daylightDayDirectoryCount}""")
-            appendLine("# HELP fenetre_android_storage_management_deleted_bytes Last storage management deleted bytes.")
-            appendLine("# TYPE fenetre_android_storage_management_deleted_bytes gauge")
-            appendLine("fenetre_android_storage_management_deleted_bytes{$cameraLabels} ${storageManagement.deletedBytesThisRun}")
-            appendLine("# HELP fenetre_android_storage_management_dry_run_deleted_bytes Last storage management dry-run deleted bytes.")
-            appendLine("# TYPE fenetre_android_storage_management_dry_run_deleted_bytes gauge")
-            appendLine("fenetre_android_storage_management_dry_run_deleted_bytes{$cameraLabels} ${storageManagement.dryRunDeletedBytesThisRun}")
-            appendLine("# HELP fenetre_android_capture_interval_seconds Configured capture interval.")
-            appendLine("# TYPE fenetre_android_capture_interval_seconds gauge")
-            appendLine("fenetre_android_capture_interval_seconds{$cameraLabels} ${settings.captureIntervalSeconds()}")
-            appendLine("# HELP fenetre_android_effective_capture_interval_seconds Current effective capture interval.")
-            appendLine("# TYPE fenetre_android_effective_capture_interval_seconds gauge")
-            appendLine("fenetre_android_effective_capture_interval_seconds{$cameraLabels} ${runtime.ssimIntervalSeconds}")
-            appendLine("# HELP fenetre_android_ssim_value Latest SSIM measurement.")
-            appendLine("# TYPE fenetre_android_ssim_value gauge")
-            appendLine("fenetre_android_ssim_value{$cameraLabels} ${runtime.ssimValue ?: -1.0}")
-            appendLine("# HELP fenetre_android_ssim_target Configured SSIM target.")
-            appendLine("# TYPE fenetre_android_ssim_target gauge")
-            appendLine("fenetre_android_ssim_target{$cameraLabels} ${settings.ssimSetpoint()}")
-            appendLine("# HELP fenetre_android_ssim_enabled Whether SSIM adaptive interval is enabled.")
-            appendLine("# TYPE fenetre_android_ssim_enabled gauge")
-            appendLine("fenetre_android_ssim_enabled{$cameraLabels} ${if (settings.ssimEnabled()) 1 else 0}")
-            appendLine("# HELP fenetre_android_star_count Latest star count in the SSIM area.")
-            appendLine("# TYPE fenetre_android_star_count gauge")
-            appendLine("fenetre_android_star_count{$cameraLabels} ${runtime.starCount}")
-            appendLine("# HELP fenetre_android_stars_detected Whether stars were detected in the latest capture.")
-            appendLine("# TYPE fenetre_android_stars_detected gauge")
-            appendLine("fenetre_android_stars_detected{$cameraLabels} ${if (runtime.starsDetected) 1 else 0}")
-            appendLine("# HELP fenetre_android_ssim_suppressed_by_stars Whether stars are currently suppressing SSIM interval adaptation.")
-            appendLine("# TYPE fenetre_android_ssim_suppressed_by_stars gauge")
-            appendLine("fenetre_android_ssim_suppressed_by_stars{$cameraLabels} ${if (runtime.ssimSuppressedByStars) 1 else 0}")
-            appendLine("# HELP fenetre_android_daily_timelapse_encoder_mode Configured daily timelapse encoder mode as labeled one-hot gauges.")
-            appendLine("# TYPE fenetre_android_daily_timelapse_encoder_mode gauge")
-            DailyTimelapseEncoderMode.entries.forEach { mode ->
-                appendLine("""fenetre_android_daily_timelapse_encoder_mode{$cameraLabels,mode="${prometheusLabelValue(mode.name.lowercase())}"} ${if (settings.dailyTimelapseEncoderMode() == mode) 1 else 0}""")
-            }
-            appendLine("# HELP fenetre_android_daily_vp9_bitrate_bits_per_second Configured VP9 daily timelapse target bitrate.")
-            appendLine("# TYPE fenetre_android_daily_vp9_bitrate_bits_per_second gauge")
-            appendLine("fenetre_android_daily_vp9_bitrate_bits_per_second{$cameraLabels} ${settings.dailyVp9BitrateBitsPerSecond()}")
-            appendLine("# HELP fenetre_android_cooldown_battery_temperature_celsius Configured battery temperature threshold for cooldown.")
-            appendLine("# TYPE fenetre_android_cooldown_battery_temperature_celsius gauge")
-            appendLine("fenetre_android_cooldown_battery_temperature_celsius{$cameraLabels} ${settings.cooldownBatteryTemperatureCelsius()}")
-            appendLine("# HELP fenetre_android_cooldown_enabled Whether thermal cooldown protection is enabled.")
-            appendLine("# TYPE fenetre_android_cooldown_enabled gauge")
-            appendLine("fenetre_android_cooldown_enabled{$cameraLabels} ${if (settings.cooldownEnabled()) 1 else 0}")
-            appendLine("# HELP fenetre_android_cooldown_thermal_status_threshold Configured Android thermal status threshold for cooldown.")
-            appendLine("# TYPE fenetre_android_cooldown_thermal_status_threshold gauge")
-            appendLine("fenetre_android_cooldown_thermal_status_threshold{$cameraLabels} ${settings.cooldownThermalStatusThreshold().value}")
-            appendLine("# HELP fenetre_android_sunrise_sunset_fast_enabled Whether fast sunrise/sunset capture is enabled.")
-            appendLine("# TYPE fenetre_android_sunrise_sunset_fast_enabled gauge")
-            appendLine("fenetre_android_sunrise_sunset_fast_enabled{$cameraLabels} ${if (settings.sunriseSunsetFastEnabled()) 1 else 0}")
-            appendLine("# HELP fenetre_android_sunrise_sunset_fast_active Whether the current time is in a fast sunrise/sunset window.")
-            appendLine("# TYPE fenetre_android_sunrise_sunset_fast_active gauge")
-            appendLine("fenetre_android_sunrise_sunset_fast_active{$cameraLabels} ${if (sunSchedule.isSunriseSunsetWindow()) 1 else 0}")
-            appendLine("# HELP fenetre_android_night_exposure_boost_stops Configured night-only exposure boost in stops.")
-            appendLine("# TYPE fenetre_android_night_exposure_boost_stops gauge")
-            appendLine("fenetre_android_night_exposure_boost_stops{$cameraLabels} ${settings.nightExposureBoostStops()}")
-            appendLine("# HELP fenetre_android_night_exposure_boost_active Whether the night exposure boost window is active.")
-            appendLine("# TYPE fenetre_android_night_exposure_boost_active gauge")
-            appendLine("fenetre_android_night_exposure_boost_active{$cameraLabels} ${if (manualNightBoostActive) 1 else 0}")
-            appendLine("# HELP fenetre_android_manual_night_target_luma Configured average luma target for manual adaptive night exposure.")
-            appendLine("# TYPE fenetre_android_manual_night_target_luma gauge")
-            appendLine("fenetre_android_manual_night_target_luma{$cameraLabels} ${settings.manualNightTargetLuma()}")
-            appendLine("# HELP fenetre_android_manual_to_auto_luma_margin Luma hysteresis margin for switching from manual adaptive back to phone auto.")
-            appendLine("# TYPE fenetre_android_manual_to_auto_luma_margin gauge")
-            appendLine("fenetre_android_manual_to_auto_luma_margin{$cameraLabels} ${settings.manualToAutoLumaMargin()}")
-            appendLine("# HELP fenetre_android_vignette_correction_enabled Whether radial vignette correction is enabled.")
-            appendLine("# TYPE fenetre_android_vignette_correction_enabled gauge")
-            appendLine("fenetre_android_vignette_correction_enabled{$cameraLabels} ${if (settings.vignetteCorrectionEnabled()) 1 else 0}")
-            appendLine("# HELP fenetre_android_vignette_correction_strength Configured radial vignette correction strength.")
-            appendLine("# TYPE fenetre_android_vignette_correction_strength gauge")
-            appendLine("fenetre_android_vignette_correction_strength{$cameraLabels} ${settings.vignetteCorrectionStrength()}")
-            appendLine("# HELP fenetre_android_camera2_night_scene_available Whether Camera2 advertises night scene mode.")
-            appendLine("# TYPE fenetre_android_camera2_night_scene_available gauge")
-            appendLine("fenetre_android_camera2_night_scene_available{$cameraLabels} ${if (camera2NightSceneAvailable) 1 else 0}")
-            appendLine("# HELP fenetre_android_camerax_night_extension_available Whether CameraX advertises the night extension.")
-            appendLine("# TYPE fenetre_android_camerax_night_extension_available gauge")
-            appendLine("fenetre_android_camerax_night_extension_available{$cameraLabels} ${if (runtime.cameraXNightExtensionAvailable) 1 else 0}")
-            appendLine("# HELP fenetre_android_night_capture_strategy_active Active night capture strategy.")
-            appendLine("# TYPE fenetre_android_night_capture_strategy_active gauge")
-            NightCaptureStrategy.entries.forEach { strategy ->
-                appendLine("""fenetre_android_night_capture_strategy_active{$cameraLabels,strategy="${prometheusLabelValue(strategy.name.lowercase())}"} ${if (activeNightStrategy == strategy) 1 else 0}""")
-            }
             appendLine("# HELP node_uname_info Labeled system information as provided by the uname system call.")
             appendLine("# TYPE node_uname_info gauge")
             appendLine("node_uname_info{$unameLabels} 1")
@@ -408,29 +447,14 @@ class FenetreAdminServer(
             appendLine("# HELP node_load1 1m load average.")
             appendLine("# TYPE node_load1 gauge")
             appendLine("node_load1 ${systemMetrics.loadAverage1m ?: -1.0}")
-            appendLine("# HELP fenetre_android_node_cpu_usage_percent System CPU usage since the previous scrape; node exporter normally exposes node_cpu_seconds_total counters instead.")
-            appendLine("# TYPE fenetre_android_node_cpu_usage_percent gauge")
-            appendLine("fenetre_android_node_cpu_usage_percent{$cameraLabels} ${systemMetrics.cpuUsagePercent ?: -1.0}")
-            appendLine("# HELP fenetre_android_process_cpu_time_seconds App process CPU time.")
-            appendLine("# TYPE fenetre_android_process_cpu_time_seconds counter")
-            appendLine("fenetre_android_process_cpu_time_seconds{$cameraLabels} ${systemMetrics.processCpuTimeSeconds}")
-            appendLine("# HELP fenetre_android_process_cpu_usage_percent App process CPU usage since the previous scrape, normalized across CPU cores.")
-            appendLine("# TYPE fenetre_android_process_cpu_usage_percent gauge")
-            appendLine("fenetre_android_process_cpu_usage_percent{$cameraLabels} ${systemMetrics.processCpuUsagePercent ?: -1.0}")
+            appendLine("# HELP fenetre_process_cpu_time_seconds App process CPU time.")
+            appendLine("# TYPE fenetre_process_cpu_time_seconds counter")
+            appendLine("fenetre_process_cpu_time_seconds{$cameraLabels} ${systemMetrics.processCpuTimeSeconds}")
             appendLine("# HELP node_cpu_scaling_frequency_hertz Current scaled CPU thread frequency in hertz.")
             appendLine("# TYPE node_cpu_scaling_frequency_hertz gauge")
             systemMetrics.cpuFrequenciesHz.forEach { (cpu, frequencyHz) ->
                 appendLine("""node_cpu_scaling_frequency_hertz{cpu="$cpu"} $frequencyHz""")
             }
-            appendLine("# HELP fenetre_android_process_memory_pss_bytes App process proportional set size.")
-            appendLine("# TYPE fenetre_android_process_memory_pss_bytes gauge")
-            appendLine("fenetre_android_process_memory_pss_bytes{$cameraLabels} ${systemMetrics.processMemoryPssBytes ?: -1}")
-            appendLine("# HELP fenetre_android_runtime_heap_used_bytes App runtime heap bytes currently used.")
-            appendLine("# TYPE fenetre_android_runtime_heap_used_bytes gauge")
-            appendLine("fenetre_android_runtime_heap_used_bytes{$cameraLabels} ${systemMetrics.runtimeHeapUsedBytes}")
-            appendLine("# HELP fenetre_android_runtime_heap_max_bytes App runtime max heap bytes.")
-            appendLine("# TYPE fenetre_android_runtime_heap_max_bytes gauge")
-            appendLine("fenetre_android_runtime_heap_max_bytes{$cameraLabels} ${systemMetrics.runtimeHeapMaxBytes}")
             appendLine("# HELP node_power_supply_capacity Battery capacity percentage.")
             appendLine("# TYPE node_power_supply_capacity gauge")
             appendLine("""node_power_supply_capacity{power_supply="battery"} ${systemMetrics.batteryLevelPercent ?: -1.0}""")
@@ -511,6 +535,54 @@ class FenetreAdminServer(
             metadataModifiedMs = if (metadata.exists()) metadata.lastModified() else null,
             metadataCapturedAtMs = capturedAtMs,
         )
+    }
+
+    private fun latestPictureMetrics(): FenetreLatestPictureMetrics {
+        val cameraDir = File(File(rootDir, "photos"), settings.cameraName())
+        val latest = File(cameraDir, "latest.jpg")
+        val metadata = File(cameraDir, "metadata.json")
+        val metadataText = if (metadata.exists()) metadata.readText() else ""
+        val bounds = if (latest.exists()) {
+            BitmapFactory.Options().apply { inJustDecodeBounds = true }.also { options ->
+                BitmapFactory.decodeFile(latest.absolutePath, options)
+            }
+        } else {
+            null
+        }
+        return FenetreLatestPictureMetrics(
+            widthPixels = bounds?.outWidth?.takeIf { it > 0 },
+            heightPixels = bounds?.outHeight?.takeIf { it > 0 },
+            iso = jsonNumber(metadataText, "iso")?.toInt(),
+            exposureTimeSeconds = jsonNumber(metadataText, "exposure_time"),
+        )
+    }
+
+    private fun cameraDirSizeBytes(): Long {
+        return dirSizeBytes(File(File(rootDir, "photos"), settings.cameraName()))
+    }
+
+    private fun dailyTimelapseCount(): Int {
+        return File(File(rootDir, "photos"), settings.cameraName())
+            .walkTopDown()
+            .count { it.isFile && it.name == "daily-timelapse.json" }
+    }
+
+    private fun dirSizeBytes(file: File): Long {
+        if (!file.exists()) {
+            return 0L
+        }
+        if (file.isFile) {
+            return file.length()
+        }
+        return file.listFiles()?.sumOf { dirSizeBytes(it) } ?: 0L
+    }
+
+    private fun jsonNumber(json: String, key: String): Double? {
+        return Regex(""""${Regex.escape(key)}"\s*:\s*(-?\d+(?:\.\d+)?)""")
+            .find(json)
+            ?.groupValues
+            ?.get(1)
+            ?.toDoubleOrNull()
     }
 
     private fun logicalBackCameraMaxExposureSeconds(): Double? {
@@ -788,6 +860,9 @@ data class FenetreRuntimeStatus(
     val selectedCameraId: String? = null,
     val selectedCameraMaxExposureSeconds: Double? = null,
     val selectedCameraVendorMaxExposureSeconds: Double? = null,
+    val captureProcessingTimeSeconds: Double? = null,
+    val picturesTakenTotal: Long = 0L,
+    val captureFailuresTotal: Long = 0L,
     val ssimValue: Double? = null,
     val ssimIntervalSeconds: Int = 0,
     val starsDetected: Boolean = false,
@@ -796,6 +871,13 @@ data class FenetreRuntimeStatus(
     val starThresholdLuma: Int? = null,
     val starBackgroundLuma: Int? = null,
     val storageManagement: StorageManagementStatus = StorageManagementStatus.empty(File(".")),
+)
+
+private data class FenetreLatestPictureMetrics(
+    val widthPixels: Int?,
+    val heightPixels: Int?,
+    val iso: Int?,
+    val exposureTimeSeconds: Double?,
 )
 
 private data class FenetreFileStatus(

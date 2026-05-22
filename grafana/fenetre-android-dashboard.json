@@ -87,7 +87,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_service_running{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_service_running{camera_name=\"$camera_name\"}",
           "legendFormat": "service",
           "refId": "A"
         }
@@ -152,7 +152,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_latest_capture_age_seconds{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_latest_capture_age_seconds{camera_name=\"$camera_name\"}",
           "legendFormat": "age",
           "refId": "A"
         }
@@ -463,7 +463,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_latest_capture_age_seconds{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_latest_capture_age_seconds{camera_name=\"$camera_name\"}",
           "legendFormat": "capture age",
           "refId": "A"
         },
@@ -472,7 +472,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_effective_capture_interval_seconds{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_capture_loop_sleep_time_seconds{camera_name=\"$camera_name\"}",
           "legendFormat": "effective interval",
           "refId": "B"
         },
@@ -481,7 +481,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_capture_interval_seconds{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_capture_interval_seconds{camera_name=\"$camera_name\"}",
           "legendFormat": "configured interval",
           "refId": "C"
         },
@@ -490,7 +490,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_daily_vp9_bitrate_bits_per_second{camera_name=\"$camera_name\"} / 1000000",
+          "expr": "fenetre_daily_vp9_bitrate_bits_per_second{camera_name=\"$camera_name\"} / 1000000",
           "legendFormat": "vp9 bitrate Mbps",
           "refId": "D"
         }
@@ -559,7 +559,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_process_memory_pss_bytes{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_process_memory_pss_bytes{camera_name=\"$camera_name\"}",
           "legendFormat": "app pss",
           "refId": "C"
         },
@@ -568,7 +568,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_runtime_heap_used_bytes{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_runtime_heap_used_bytes{camera_name=\"$camera_name\"}",
           "legendFormat": "app heap used",
           "refId": "D"
         },
@@ -577,7 +577,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_runtime_heap_max_bytes{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_runtime_heap_max_bytes{camera_name=\"$camera_name\"}",
           "legendFormat": "app heap max",
           "refId": "E"
         }
@@ -641,7 +641,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_node_cpu_usage_percent{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_system_cpu_usage_percent{camera_name=\"$camera_name\"}",
           "legendFormat": "system cpu",
           "refId": "A"
         },
@@ -650,7 +650,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_process_cpu_usage_percent{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_process_cpu_usage_percent{camera_name=\"$camera_name\"}",
           "legendFormat": "app cpu",
           "refId": "B"
         },
@@ -788,7 +788,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_latest_image_bytes{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_picture_size_bytes{camera_name=\"$camera_name\"}",
           "legendFormat": "latest image",
           "refId": "D"
         }
@@ -903,7 +903,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_cooldown_battery_temperature_celsius{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_cooldown_battery_temperature_celsius{camera_name=\"$camera_name\"}",
           "legendFormat": "cooldown threshold",
           "refId": "D"
         }
@@ -954,7 +954,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_service_running{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_service_running{camera_name=\"$camera_name\"}",
           "legendFormat": "service running",
           "refId": "A"
         },
@@ -963,7 +963,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_capture_in_progress{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_capture_in_progress{camera_name=\"$camera_name\"}",
           "legendFormat": "capture in progress",
           "refId": "B"
         },
@@ -972,7 +972,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_sunrise_sunset_fast_enabled{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_sunrise_sunset_fast_enabled{camera_name=\"$camera_name\"}",
           "legendFormat": "fast enabled",
           "refId": "C"
         },
@@ -981,7 +981,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_sunrise_sunset_fast_active{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_sunrise_sunset_fast_active{camera_name=\"$camera_name\"}",
           "legendFormat": "fast active",
           "refId": "D"
         },
@@ -990,7 +990,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_cooldown_enabled{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_cooldown_enabled{camera_name=\"$camera_name\"}",
           "legendFormat": "cooldown enabled",
           "refId": "E"
         },
@@ -999,7 +999,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_thermal_paused{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_thermal_paused{camera_name=\"$camera_name\"}",
           "legendFormat": "thermal paused",
           "refId": "F"
         },
@@ -1008,7 +1008,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_daily_timelapse_encoder_mode{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_daily_timelapse_encoder_mode{camera_name=\"$camera_name\"}",
           "legendFormat": "daily {{mode}}",
           "refId": "G"
         }
@@ -1183,7 +1183,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_ssim_value{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_ssim_value{camera_name=\"$camera_name\"}",
           "legendFormat": "ssim",
           "refId": "A"
         },
@@ -1192,7 +1192,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_ssim_target{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_ssim_target{camera_name=\"$camera_name\"}",
           "legendFormat": "target",
           "refId": "B"
         },
@@ -1201,7 +1201,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_effective_capture_interval_seconds{camera_name=\"$camera_name\"} / 100",
+          "expr": "fenetre_capture_loop_sleep_time_seconds{camera_name=\"$camera_name\"} / 100",
           "legendFormat": "effective interval / 100",
           "refId": "C"
         }
@@ -1289,7 +1289,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_star_count{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_star_count{camera_name=\"$camera_name\"}",
           "legendFormat": "star count",
           "refId": "A"
         },
@@ -1298,7 +1298,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_stars_detected{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_stars_detected{camera_name=\"$camera_name\"}",
           "legendFormat": "stars detected",
           "refId": "B"
         },
@@ -1307,7 +1307,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_ssim_suppressed_by_stars{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_ssim_suppressed_by_stars{camera_name=\"$camera_name\"}",
           "legendFormat": "ssim suppressed",
           "refId": "C"
         }
@@ -1395,7 +1395,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_manual_night_target_luma{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_manual_night_target_luma{camera_name=\"$camera_name\"}",
           "legendFormat": "target luma",
           "refId": "A"
         },
@@ -1404,7 +1404,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_manual_to_auto_luma_margin{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_manual_to_auto_luma_margin{camera_name=\"$camera_name\"}",
           "legendFormat": "manual to auto margin",
           "refId": "B"
         },
@@ -1413,7 +1413,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_vignette_correction_strength{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_vignette_correction_strength{camera_name=\"$camera_name\"}",
           "legendFormat": "vignette strength",
           "refId": "C"
         }
@@ -1483,7 +1483,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_ssim_enabled{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_ssim_enabled{camera_name=\"$camera_name\"}",
           "legendFormat": "ssim enabled",
           "refId": "A"
         }
@@ -1553,7 +1553,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_stars_detected{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_stars_detected{camera_name=\"$camera_name\"}",
           "legendFormat": "stars detected",
           "refId": "A"
         }
@@ -1641,7 +1641,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_camera2_night_scene_available{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_camera2_night_scene_available{camera_name=\"$camera_name\"}",
           "legendFormat": "camera2 night scene",
           "refId": "A"
         },
@@ -1650,7 +1650,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_camerax_night_extension_available{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_camerax_night_extension_available{camera_name=\"$camera_name\"}",
           "legendFormat": "camerax night extension",
           "refId": "B"
         }
@@ -1738,7 +1738,7 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_vignette_correction_enabled{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_vignette_correction_enabled{camera_name=\"$camera_name\"}",
           "legendFormat": "enabled",
           "refId": "A"
         },
@@ -1747,12 +1747,1011 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_vignette_correction_strength{camera_name=\"$camera_name\"}",
+          "expr": "fenetre_vignette_correction_strength{camera_name=\"$camera_name\"}",
           "legendFormat": "strength",
           "refId": "B"
         }
       ],
       "title": "Vignette Correction",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 46
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_camera_online{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "online",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Camera Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 46
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_ssim_target{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "SSIM target",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_ssim_value{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "SSIM value",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_capture_loop_sleep_time_seconds{camera_name=\"$camera_name\"} / 100",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "Sleep time / 100",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "SSIM vs Sleep Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 46
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "increase(fenetre_pictures_taken_total{camera_name=\"$camera_name\"}[1h])",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "pictures / hour",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "increase(fenetre_pictures_taken_total{camera_name=\"$camera_name\"}[1h]) / 60",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "timelapse speed",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Pictures Taken",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 52
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_picture_iso{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "ISO",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_picture_exposure_time_seconds{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "exposure seconds",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Camera Exposure",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 52
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_capture_loop_sleep_time_seconds{camera_name=\"$camera_name\"} + fenetre_capture_processing_time_seconds{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "total loop time",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_capture_processing_time_seconds{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "processing time",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_picture_exposure_time_seconds{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "exposure time",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Capture Timing",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 52
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_picture_iso{camera_name=\"$camera_name\"} * fenetre_picture_exposure_time_seconds{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "ISO x seconds",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_camera_mode{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "{{mode}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Exposure Composite",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 60
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_storage_day_directories_archived{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "archived",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_storage_day_directories_total{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "total",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_storage_day_directories_daylight{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "daylight",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_storage_day_directories_timelapse{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "timelapse",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Day Directory Counts",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 60
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_timelapses_created_total{camera_name=\"$camera_name\",type=\"daily\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "daily",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_timelapse_queue_size{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "queue",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Timelapses Created",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 60
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$datasource"
+          },
+          "editorMode": "code",
+          "expr": "fenetre_picture_iso{camera_name=\"$camera_name\"}",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "{{camera_name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "ISO",
       "type": "timeseries"
     }
   ],
@@ -1806,7 +2805,7 @@
           "type": "prometheus",
           "uid": "$datasource"
         },
-        "definition": "label_values(fenetre_android_service_running{instance=\"$instance\"}, camera_name)",
+        "definition": "label_values(fenetre_service_running{instance=\"$instance\"}, camera_name)",
         "hide": 0,
         "includeAll": false,
         "label": "Camera",
@@ -1814,7 +2813,7 @@
         "name": "camera_name",
         "options": [],
         "query": {
-          "query": "label_values(fenetre_android_service_running{instance=\"$instance\"}, camera_name)",
+          "query": "label_values(fenetre_service_running{instance=\"$instance\"}, camera_name)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,

@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.util.Range
 import android.view.Surface
@@ -70,6 +71,10 @@ class FenetreCaptureService : LifecycleService() {
     private var lastSsimSuppressedByStars = false
     private var lastStarThresholdLuma: Int? = null
     private var lastStarBackgroundLuma: Int? = null
+    private var captureStartedElapsedMs: Long? = null
+    private var lastCaptureProcessingTimeSeconds: Double? = null
+    private var picturesTakenTotal = 0L
+    private var captureFailuresTotal = 0L
     private var lastNotification = "Starting"
     private var running = false
 
@@ -195,6 +200,9 @@ class FenetreCaptureService : LifecycleService() {
                     selectedCameraId = selectedCameraId,
                     selectedCameraMaxExposureSeconds = selectedCameraMaxExposureSeconds(),
                     selectedCameraVendorMaxExposureSeconds = selectedCameraVendorMaxExposureSeconds(),
+                    captureProcessingTimeSeconds = lastCaptureProcessingTimeSeconds,
+                    picturesTakenTotal = picturesTakenTotal,
+                    captureFailuresTotal = captureFailuresTotal,
                     ssimValue = lastSsimValue,
                     ssimIntervalSeconds = effectiveCaptureIntervalSeconds(),
                     starsDetected = lastStarsDetected,
@@ -419,6 +427,7 @@ class FenetreCaptureService : LifecycleService() {
                         return
                     }
                     Log.e(TAG, "Capture failed", exception)
+                    captureFailuresTotal += 1
                     updateNotification("Capture failed: ${exception.message ?: exception.imageCaptureError}")
                     scheduleNextCapture()
                 }
@@ -429,6 +438,7 @@ class FenetreCaptureService : LifecycleService() {
     private fun beginCapture(photoFile: File): Int {
         captureInProgress = true
         serviceCaptureInProgress = true
+        captureStartedElapsedMs = SystemClock.elapsedRealtime()
         captureGeneration += 1
         val generation = captureGeneration
         val timeoutMs = captureTimeoutMs()
@@ -476,6 +486,7 @@ class FenetreCaptureService : LifecycleService() {
     }
 
     private fun onCaptureSaved(photoFile: File) {
+        val processingStartedElapsedMs = captureStartedElapsedMs
         val captureExif = CaptureExif.fromFile(photoFile)
         val exposureComposite = captureExif.exposureComposite()
         val imageBrightness = averageNormalizedLuma(photoFile)
@@ -503,6 +514,10 @@ class FenetreCaptureService : LifecycleService() {
             ssimResult,
             captureExif,
         )
+        picturesTakenTotal += 1
+        lastCaptureProcessingTimeSeconds = processingStartedElapsedMs?.let {
+            (SystemClock.elapsedRealtime() - it) / 1000.0
+        }
         if (!pauseForCooldownIfNeeded()) {
             timelapse.scheduleFrequent()
             timelapse.scheduleDailyForCompletedDays()
