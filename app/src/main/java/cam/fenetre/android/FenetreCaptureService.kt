@@ -510,7 +510,7 @@ class FenetreCaptureService : LifecycleService() {
             storageManager.maybeSchedule()
         }
         updateNotification("Last capture: ${photoFile.name}; web: ${webServer?.url().orEmpty()}")
-        val modeChanged = updateAdaptiveCaptureMode(captureExif, exposureComposite)
+        val modeChanged = updateAdaptiveCaptureMode(imageBrightness)
         val nextManualExposure = nextManualExposureSettings(
             captureExif,
             imageBrightness,
@@ -535,14 +535,19 @@ class FenetreCaptureService : LifecycleService() {
             return ssimResult(lastSsimValue, effectiveCaptureIntervalSeconds(), compared = false)
         }
         val currentSample = analysis.sample
-        updateStarDetectionStatus(analysis.starDetection)
+        val starDetectionActive = cameraSettings.starDetectionEnabled() && sunSchedule.isNightWindow()
+        if (starDetectionActive) {
+            updateStarDetectionStatus(analysis.starDetection)
+        } else {
+            clearStarDetectionStatus()
+        }
         if (sunSchedule.isSunriseSunsetWindow()) {
             previousSsimSample = currentSample
             lastSsimValue = null
             lastSsimSuppressedByStars = false
             return ssimResult(null, effectiveCaptureIntervalSeconds(), compared = false)
         }
-        if (cameraSettings.starDetectionEnabled() && sunSchedule.isNightWindow() && analysis.starDetection.detected) {
+        if (starDetectionActive && analysis.starDetection.detected) {
             previousSsimSample = currentSample
             lastSsimValue = null
             lastSsimSuppressedByStars = true
@@ -666,30 +671,27 @@ class FenetreCaptureService : LifecycleService() {
         return exposureMode
     }
 
-    private fun updateAdaptiveCaptureMode(captureExif: CaptureExif, exposureComposite: Double?): Boolean {
+    private fun updateAdaptiveCaptureMode(imageBrightness: Double?): Boolean {
         if (exposureMode != ExposureMode.AUTO) {
             return setAdaptiveCaptureMode(ExposureMode.PHONE_AUTO)
         }
-        val composite = exposureComposite ?: return false
-        val iso = captureExif.iso ?: return false
+        val luma = imageBrightness ?: return false
+        val manualTarget = cameraSettings.manualNightTargetLuma()
         val nextMode = if (adaptiveCaptureMode == ExposureMode.PHONE_AUTO) {
-            if (
-                iso > cameraSettings.nightAdaptiveIsoThreshold() &&
-                composite > cameraSettings.nightExposureCompositeThreshold()
-            ) {
+            if (luma <= manualTarget) {
                 Log.i(
                     TAG,
-                    "Switching to night capture strategy: ISO $iso > ${cameraSettings.nightAdaptiveIsoThreshold()} " +
-                        "and ISO * exposure = $composite"
+                    "Switching to night capture strategy: luma $luma <= target $manualTarget"
                 )
                 ExposureMode.AUTO
             } else {
                 ExposureMode.PHONE_AUTO
             }
-        } else if (composite < cameraSettings.dayExposureCompositeThreshold()) {
+        } else if (luma >= manualTarget + cameraSettings.manualToAutoLumaMargin()) {
             Log.i(
                 TAG,
-                "Switching to phone auto exposure: ISO $iso * exposure = $composite"
+                "Switching to phone auto exposure: luma $luma >= target $manualTarget + " +
+                    "margin ${cameraSettings.manualToAutoLumaMargin()}"
             )
             ExposureMode.PHONE_AUTO
         } else {

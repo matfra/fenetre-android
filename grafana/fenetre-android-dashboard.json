@@ -1404,8 +1404,8 @@
             "type": "prometheus",
             "uid": "$datasource"
           },
-          "expr": "fenetre_android_night_adaptive_iso_threshold{camera_name=\"$camera_name\"}",
-          "legendFormat": "adaptive iso threshold",
+          "expr": "fenetre_android_manual_to_auto_luma_margin{camera_name=\"$camera_name\"}",
+          "legendFormat": "manual to auto margin",
           "refId": "B"
         },
         {

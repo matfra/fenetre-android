@@ -289,20 +289,13 @@ class MainActivity : ComponentActivity() {
             it.toIntOrNull()?.let(cameraSettings::setNightExposureBoostTwilightBufferMinutes)
         })
         content.addView(helpText("Night boost applies only after sunset plus this buffer and before sunrise minus this buffer. Leave it at 0 to use the normal adaptive brightness target."))
-        content.addView(settingEditText("Day composite threshold", cameraSettings.dayExposureCompositeThreshold().toString(), decimalInputType()) {
-            it.toDoubleOrNull()?.let(cameraSettings::setDayExposureCompositeThreshold)
-        })
-        content.addView(settingEditText("Night composite threshold", cameraSettings.nightExposureCompositeThreshold().toString(), decimalInputType()) {
-            it.toDoubleOrNull()?.let(cameraSettings::setNightExposureCompositeThreshold)
-        })
-        content.addView(settingEditText("Night adaptive ISO threshold", cameraSettings.nightAdaptiveIsoThreshold().toString(), InputType.TYPE_CLASS_NUMBER) {
-            it.toIntOrNull()?.let(cameraSettings::setNightAdaptiveIsoThreshold)
-        })
-        content.addView(helpText("Exposure composite is ISO times shutter seconds. Phone auto switches to manual adaptive above the night threshold when ISO rises over this threshold; manual adaptive switches back below the day threshold."))
         content.addView(settingEditText("Manual night target brightness", cameraSettings.manualNightTargetLuma().toString(), decimalInputType()) {
             it.toDoubleOrNull()?.let(cameraSettings::setManualNightTargetLuma)
         })
-        content.addView(helpText("Manual adaptive exposure targets this average luma. Use values like 0.08 for darker skies or 0.12 for brighter night detail."))
+        content.addView(settingEditText("Manual to auto luma margin", cameraSettings.manualToAutoLumaMargin().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setManualToAutoLumaMargin)
+        })
+        content.addView(helpText("Phone auto switches to manual adaptive when luma falls to the target. Manual adaptive switches back only above target plus the manual-to-auto margin."))
         content.addView(settingCheckBox("Vignette correction", cameraSettings.vignetteCorrectionEnabled()) {
             cameraSettings.setVignetteCorrectionEnabled(it)
         })

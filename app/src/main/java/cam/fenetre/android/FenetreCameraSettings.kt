@@ -347,37 +347,6 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putString(KEY_NIGHT_CAPTURE_STRATEGY, value.name).apply()
     }
 
-    fun dayExposureCompositeThreshold(): Double = preferences.getFloat(
-        KEY_DAY_EXPOSURE_COMPOSITE_THRESHOLD,
-        DEFAULT_DAY_EXPOSURE_COMPOSITE_THRESHOLD.toFloat(),
-    ).toDouble().coerceIn(0.0, 10_000.0)
-
-    fun setDayExposureCompositeThreshold(value: Double) {
-        preferences.edit()
-            .putFloat(KEY_DAY_EXPOSURE_COMPOSITE_THRESHOLD, value.coerceIn(0.0, 10_000.0).toFloat())
-            .apply()
-    }
-
-    fun nightExposureCompositeThreshold(): Double = preferences.getFloat(
-        KEY_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD,
-        DEFAULT_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD.toFloat(),
-    ).toDouble().coerceIn(0.0, 10_000.0)
-
-    fun setNightExposureCompositeThreshold(value: Double) {
-        preferences.edit()
-            .putFloat(KEY_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD, value.coerceIn(0.0, 10_000.0).toFloat())
-            .apply()
-    }
-
-    fun nightAdaptiveIsoThreshold(): Int = preferences.getInt(
-        KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD,
-        DEFAULT_NIGHT_ADAPTIVE_ISO_THRESHOLD,
-    ).coerceIn(25, 6400)
-
-    fun setNightAdaptiveIsoThreshold(value: Int) {
-        preferences.edit().putInt(KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD, value.coerceIn(25, 6400)).apply()
-    }
-
     fun manualNightTargetLuma(): Double = preferences.getFloat(
         KEY_MANUAL_NIGHT_TARGET_LUMA,
         DEFAULT_MANUAL_NIGHT_TARGET_LUMA.toFloat(),
@@ -386,6 +355,17 @@ class FenetreCameraSettings(context: Context) {
     fun setManualNightTargetLuma(value: Double) {
         preferences.edit()
             .putFloat(KEY_MANUAL_NIGHT_TARGET_LUMA, value.coerceIn(0.01, 0.8).toFloat())
+            .apply()
+    }
+
+    fun manualToAutoLumaMargin(): Double = preferences.getFloat(
+        KEY_MANUAL_TO_AUTO_LUMA_MARGIN,
+        DEFAULT_MANUAL_TO_AUTO_LUMA_MARGIN.toFloat(),
+    ).toDouble().coerceIn(0.0, 0.5)
+
+    fun setManualToAutoLumaMargin(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_MANUAL_TO_AUTO_LUMA_MARGIN, value.coerceIn(0.0, 0.5).toFloat())
             .apply()
     }
 
@@ -686,10 +666,8 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_NIGHT_EXPOSURE_BOOST_STOPS = "night_exposure_boost_stops"
         private const val KEY_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES = "night_exposure_boost_twilight_buffer_minutes"
         private const val KEY_NIGHT_CAPTURE_STRATEGY = "night_capture_strategy"
-        private const val KEY_DAY_EXPOSURE_COMPOSITE_THRESHOLD = "day_exposure_composite_threshold"
-        private const val KEY_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD = "night_exposure_composite_threshold"
-        private const val KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD = "night_adaptive_iso_threshold"
         private const val KEY_MANUAL_NIGHT_TARGET_LUMA = "manual_night_target_luma"
+        private const val KEY_MANUAL_TO_AUTO_LUMA_MARGIN = "manual_to_auto_luma_margin"
         private const val KEY_VIGNETTE_CORRECTION_ENABLED = "vignette_correction_enabled"
         private const val KEY_VIGNETTE_CORRECTION_STRENGTH = "vignette_correction_strength"
         private const val KEY_VIGNETTE_CORRECTION_POWER = "vignette_correction_power"
@@ -747,10 +725,8 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_NIGHT_EXPOSURE_BOOST_STOPS = 0.0
         private const val DEFAULT_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES = 90
         private val DEFAULT_NIGHT_CAPTURE_STRATEGY = NightCaptureStrategy.MANUAL_ADAPTIVE
-        private const val DEFAULT_DAY_EXPOSURE_COMPOSITE_THRESHOLD = 1.0
-        private const val DEFAULT_NIGHT_EXPOSURE_COMPOSITE_THRESHOLD = 2.0
-        private const val DEFAULT_NIGHT_ADAPTIVE_ISO_THRESHOLD = 100
         private const val DEFAULT_MANUAL_NIGHT_TARGET_LUMA = 0.15
+        private const val DEFAULT_MANUAL_TO_AUTO_LUMA_MARGIN = 0.05
         private const val DEFAULT_VIGNETTE_CORRECTION_STRENGTH = 0.2
         private const val DEFAULT_VIGNETTE_CORRECTION_POWER = 1.2
         private const val DEFAULT_VIGNETTE_CORRECTION_RADIUS = 0.95

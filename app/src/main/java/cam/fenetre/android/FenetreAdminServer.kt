@@ -159,10 +159,8 @@ class FenetreAdminServer(
                 "night_exposure_boost_stops": ${settings.nightExposureBoostStops()},
                 "night_exposure_boost_twilight_buffer_minutes": ${settings.nightExposureBoostTwilightBufferMinutes()},
                 "night_exposure_boost_active": $manualNightBoostActive,
-                "day_exposure_composite_threshold": ${settings.dayExposureCompositeThreshold()},
-                "night_exposure_composite_threshold": ${settings.nightExposureCompositeThreshold()},
-                "night_adaptive_iso_threshold": ${settings.nightAdaptiveIsoThreshold()},
                 "manual_night_target_luma": ${settings.manualNightTargetLuma()},
+                "manual_to_auto_luma_margin": ${settings.manualToAutoLumaMargin()},
                 "vignette_correction_enabled": ${settings.vignetteCorrectionEnabled()},
                 "vignette_correction_strength": ${settings.vignetteCorrectionStrength()},
                 "vignette_correction_power": ${settings.vignetteCorrectionPower()},
@@ -378,9 +376,9 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_android_manual_night_target_luma Configured average luma target for manual adaptive night exposure.")
             appendLine("# TYPE fenetre_android_manual_night_target_luma gauge")
             appendLine("fenetre_android_manual_night_target_luma{$cameraLabels} ${settings.manualNightTargetLuma()}")
-            appendLine("# HELP fenetre_android_night_adaptive_iso_threshold Phone-auto ISO threshold for switching to manual adaptive night capture.")
-            appendLine("# TYPE fenetre_android_night_adaptive_iso_threshold gauge")
-            appendLine("fenetre_android_night_adaptive_iso_threshold{$cameraLabels} ${settings.nightAdaptiveIsoThreshold()}")
+            appendLine("# HELP fenetre_android_manual_to_auto_luma_margin Luma hysteresis margin for switching from manual adaptive back to phone auto.")
+            appendLine("# TYPE fenetre_android_manual_to_auto_luma_margin gauge")
+            appendLine("fenetre_android_manual_to_auto_luma_margin{$cameraLabels} ${settings.manualToAutoLumaMargin()}")
             appendLine("# HELP fenetre_android_vignette_correction_enabled Whether radial vignette correction is enabled.")
             appendLine("# TYPE fenetre_android_vignette_correction_enabled gauge")
             appendLine("fenetre_android_vignette_correction_enabled{$cameraLabels} ${if (settings.vignetteCorrectionEnabled()) 1 else 0}")
