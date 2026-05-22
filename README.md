@@ -55,6 +55,99 @@ systemctl --user daemon-reload
 systemctl --user enable --now fenetre-adb-keepalive.service
 ```
 
+## Local Emulator For Web UI Iteration
+
+For web UI work, use the local AVD instead of reinstalling on a physical phone:
+
+```bash
+/home/mathieu/Android/Sdk/cmdline-tools/latest/bin/avdmanager create avd \
+  --name fenetre_webui \
+  --package "system-images;android-35;google_apis;x86_64" \
+  --device pixel_6_pro
+```
+
+If the emulator or Android 35 Google APIs image is missing, install them first:
+
+```bash
+/home/mathieu/Android/Sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/home/mathieu/Android/Sdk \
+  "emulator" \
+  "system-images;android-35;google_apis;x86_64"
+```
+
+Start the emulator headless:
+
+```bash
+setsid sg kvm -c '/home/mathieu/Android/Sdk/emulator/emulator -avd fenetre_webui -no-window -no-audio -gpu swiftshader_indirect -camera-back emulated -camera-front none -port 5554' \
+  </dev/null > /tmp/fenetre_webui_emulator.log 2>&1 &
+```
+
+Install the app, start the capture service, and forward the embedded web ports
+to high localhost ports so they do not conflict with real phones:
+
+```bash
+ANDROID_HOME=/home/mathieu/Android/Sdk ./gradlew :app:assembleDebug
+/home/mathieu/Android/Sdk/platform-tools/adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+/home/mathieu/Android/Sdk/platform-tools/adb -s emulator-5554 shell pm grant cam.fenetre.android android.permission.CAMERA || true
+/home/mathieu/Android/Sdk/platform-tools/adb -s emulator-5554 shell am start-foreground-service -n cam.fenetre.android/.FenetreCaptureService -a cam.fenetre.android.START_CAPTURE
+/home/mathieu/Android/Sdk/platform-tools/adb -s emulator-5554 forward tcp:18888 tcp:8888
+/home/mathieu/Android/Sdk/platform-tools/adb -s emulator-5554 forward tcp:18889 tcp:8889
+```
+
+Emulator URLs:
+
+- Public UI: `http://127.0.0.1:18888/`
+- Admin UI: `http://127.0.0.1:18889/`
+
+ADB forwards bind to localhost. To expose the emulator UI on LAN addresses too,
+run a small TCP proxy from the host LAN interfaces to the localhost forwards:
+
+```bash
+BIND_ADDRS=$(ip -4 -o addr show scope global | awk '$2 !~ /^(docker|br-|tailscale)/ {split($4,a,"/"); print a[1]}' | paste -sd, -)
+export BIND_ADDRS
+setsid python3 - <<'PY' >/tmp/fenetre_webui_lan_proxy.log 2>&1 &
+import asyncio, os, signal
+
+bind_addrs = [addr for addr in os.environ["BIND_ADDRS"].split(",") if addr]
+routes = [(18888, "127.0.0.1", 18888), (18889, "127.0.0.1", 18889)]
+servers = []
+
+async def pipe(reader, writer):
+    try:
+        while data := await reader.read(65536):
+            writer.write(data)
+            await writer.drain()
+    finally:
+        writer.close()
+        await writer.wait_closed()
+
+async def handle(client_reader, client_writer, target_host, target_port):
+    upstream_reader, upstream_writer = await asyncio.open_connection(target_host, target_port)
+    await asyncio.gather(pipe(client_reader, upstream_writer), pipe(upstream_reader, client_writer))
+
+async def main():
+    for bind_addr in bind_addrs:
+        for listen_port, target_host, target_port in routes:
+            servers.append(await asyncio.start_server(
+                lambda r, w, th=target_host, tp=target_port: handle(r, w, th, tp),
+                bind_addr,
+                listen_port,
+            ))
+    stop = asyncio.Future()
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, stop.set_result, None)
+    await stop
+
+asyncio.run(main())
+PY
+echo $! > /tmp/fenetre_webui_lan_proxy.pid
+```
+
+Stop the emulator with:
+
+```bash
+/home/mathieu/Android/Sdk/platform-tools/adb -s emulator-5554 emu kill
+```
+
 ## Exposure Control
 
 The default exposure mode is `Adaptive low ISO`, but the app does not force
