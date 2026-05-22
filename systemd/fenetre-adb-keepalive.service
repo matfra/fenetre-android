@@ -1,0 +1,17 @@
+[Unit]
+Description=Fenetre Android ADB wireless keepalive
+Documentation=file:/home/mathieu/fenetre-playground/fenetre-android/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mathieu/fenetre-playground/fenetre-android
+Environment=ADB=/home/mathieu/Android/Sdk/platform-tools/adb
+Environment=ADB_KEEPALIVE_INTERVAL_SECONDS=60
+ExecStart=/home/mathieu/fenetre-playground/fenetre-android/scripts/adb-keepalive.sh /home/mathieu/fenetre-playground/fenetre-android/adb-devices.yaml
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

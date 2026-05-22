@@ -29,6 +29,32 @@ ANDROID_HOME=/home/mathieu/Android/Sdk ./gradlew :app:assembleDebug
 
 The app serves the public camera UI on port `8888` and the admin UI/API on port `8889`.
 
+## ADB Keepalive
+
+Wireless debugging ports can stop responding when they sit idle. Keep the
+current phone ports in `adb-devices.yaml`, then run:
+
+```bash
+scripts/adb-keepalive.sh
+```
+
+To leave it running in the background:
+
+```bash
+nohup scripts/adb-keepalive.sh > adb-keepalive.log 2>&1 &
+```
+
+Set `ADB_KEEPALIVE_INTERVAL_SECONDS` to change the default 60-second interval.
+
+To run it automatically under user systemd:
+
+```bash
+mkdir -p ~/.config/systemd/user
+ln -sf "$PWD/systemd/fenetre-adb-keepalive.service" ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now fenetre-adb-keepalive.service
+```
+
 ## Exposure Control
 
 The default exposure mode is `Adaptive low ISO`, but the app does not force

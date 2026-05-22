@@ -1,0 +1,7 @@
+devices:
+  - name: p6p
+    ip: 192.168.8.242
+    port: 43201
+  - name: s20
+    ip: 192.168.8.187
+    port: 42855
