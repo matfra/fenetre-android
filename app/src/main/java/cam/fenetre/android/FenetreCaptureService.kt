@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
@@ -17,6 +18,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.util.Range
+import android.util.Size
 import android.view.Surface
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
@@ -58,6 +60,7 @@ class FenetreCaptureService : LifecycleService() {
     private var captureMode = ExposureMode.AUTO
     private var adaptiveCaptureMode = ExposureMode.PHONE_AUTO
     private var selectedCameraId: String? = null
+    private var selectedPhysicalCameraId: String? = null
     private var manualExposureSettings: ManualExposureSettings? = null
     private var captureInProgress = false
     private var captureGeneration = 0
@@ -198,6 +201,7 @@ class FenetreCaptureService : LifecycleService() {
                     activeNightCaptureStrategy = activeNightCaptureStrategy(),
                     cameraXNightExtensionAvailable = cameraXNightExtensionAvailable(),
                     selectedCameraId = selectedCameraId,
+                    selectedPhysicalCameraId = selectedPhysicalCameraId,
                     selectedCameraMaxExposureSeconds = selectedCameraMaxExposureSeconds(),
                     selectedCameraVendorMaxExposureSeconds = selectedCameraVendorMaxExposureSeconds(),
                     captureProcessingTimeSeconds = lastCaptureProcessingTimeSeconds,
@@ -223,7 +227,9 @@ class FenetreCaptureService : LifecycleService() {
                 val provider = providerFuture.get()
                 ensureExtensionsManager(provider)
                 lensMode = cameraSettings.lensMode()
-                selectedCameraId = cameraIdForLensMode(lensMode)
+                val selectedCamera = cameraSelectionForLensMode(lensMode)
+                selectedCameraId = selectedCamera?.cameraId
+                selectedPhysicalCameraId = selectedCamera?.physicalCameraId
                 rotationDegrees = cameraSettings.rotationDegrees()
                 exposureMode = cameraSettings.exposureMode()
                 captureMode = resolvedCaptureMode()
@@ -278,7 +284,11 @@ class FenetreCaptureService : LifecycleService() {
             .setCaptureMode(captureMode)
             .setJpegQuality(92)
             .setTargetRotation(Surface.ROTATION_90)
+        selectedFourThreeJpegSize()?.let { builder.setTargetResolution(it) }
         val extender = Camera2Interop.Extender(builder)
+        if (activeNightStrategy != NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION) {
+            selectedPhysicalCameraId?.let { extender.setPhysicalCameraId(it) }
+        }
         extender.setCaptureRequestOption(
             CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
             CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_OFF
@@ -379,6 +389,10 @@ class FenetreCaptureService : LifecycleService() {
     }
 
     private fun applyLensMode(zoomState: ZoomState?, cameraControl: androidx.camera.core.CameraControl) {
+        if (selectedPhysicalCameraId != null) {
+            cameraControl.setZoomRatio(1.0f)
+            return
+        }
         val minZoom = zoomState?.minZoomRatio ?: 1.0f
         val maxZoom = zoomState?.maxZoomRatio ?: 1.0f
         val requestedZoom = when (lensMode) {
@@ -861,6 +875,24 @@ class FenetreCaptureService : LifecycleService() {
             ?.let { it / 1_000_000_000.0 }
     }
 
+    private fun selectedFourThreeJpegSize(): Size? {
+        return try {
+            val cameraManager = getSystemService(CameraManager::class.java)
+            val cameraId = selectedPhysicalCameraId ?: selectedCameraId ?: return null
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+            val sizes = characteristics
+                .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                ?.getOutputSizes(ImageFormat.JPEG)
+                ?: return null
+            sizes
+                .filter { size -> kotlin.math.abs(size.width.toDouble() / size.height.toDouble() - FOUR_THREE_ASPECT_RATIO) < ASPECT_RATIO_TOLERANCE }
+                .maxByOrNull { size -> size.width.toLong() * size.height.toLong() }
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to select 4:3 JPEG size", exception)
+            null
+        }
+    }
+
     private fun samsungVendorExposureTimeRange(
         characteristics: CameraCharacteristics?,
     ): Range<Long>? {
@@ -882,9 +914,36 @@ class FenetreCaptureService : LifecycleService() {
         }
     }
 
-    private fun cameraIdForLensMode(mode: LensMode): String? {
+    private fun cameraSelectionForLensMode(mode: LensMode): LensCameraSelection? {
         return try {
             val cameraManager = getSystemService(CameraManager::class.java)
+            val physicalBackCameras = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                cameraManager.cameraIdList.flatMap { logicalId ->
+                    val logicalCharacteristics = cameraManager.getCameraCharacteristics(logicalId)
+                    if (logicalCharacteristics.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_BACK) {
+                        return@flatMap emptyList()
+                    }
+                    logicalCharacteristics.physicalCameraIds.mapNotNull { physicalId ->
+                        val physicalCharacteristics = cameraManager.getCameraCharacteristics(physicalId)
+                        val focalLength = physicalCharacteristics
+                            .get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                            ?.firstOrNull()
+                            ?: return@mapNotNull null
+                        LensCameraCandidate(logicalId, physicalId, focalLength)
+                    }
+                }.sortedBy { it.focalLength }
+            } else {
+                emptyList()
+            }
+            if (physicalBackCameras.isNotEmpty()) {
+                val candidate = when (mode) {
+                    LensMode.ULTRA_WIDE -> physicalBackCameras.first()
+                    LensMode.WIDE -> physicalBackCameras[physicalBackCameras.size / 2]
+                    LensMode.TELE -> physicalBackCameras.last()
+                }
+                return LensCameraSelection(candidate.cameraId, candidate.physicalCameraId)
+            }
+
             val backCameras = cameraManager.cameraIdList.mapNotNull { id ->
                 val characteristics = cameraManager.getCameraCharacteristics(id)
                 if (characteristics.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_BACK) {
@@ -901,7 +960,7 @@ class FenetreCaptureService : LifecycleService() {
                 LensMode.ULTRA_WIDE -> backCameras.firstOrNull()?.first
                 LensMode.WIDE -> backCameras.getOrNull(backCameras.size / 2)?.first
                 LensMode.TELE -> backCameras.lastOrNull()?.first
-            }
+            }?.let { LensCameraSelection(it, null) }
         } catch (exception: Exception) {
             Log.w(TAG, "Unable to select camera ID for lens mode", exception)
             null
@@ -998,6 +1057,8 @@ class FenetreCaptureService : LifecycleService() {
         private const val COOLDOWN_CHECK_INTERVAL_MS = 60_000L
         private const val INFINITY_FOCUS_DIOPTERS = 0.0f
         private const val EXPOSURE_DEADBAND = 0.08
+        private const val FOUR_THREE_ASPECT_RATIO = 4.0 / 3.0
+        private const val ASPECT_RATIO_TOLERANCE = 0.02
         private const val MIN_DARKEN_EXPOSURE_ADJUSTMENT_FACTOR = 0.25
         private const val MAX_BRIGHTEN_EXPOSURE_ADJUSTMENT_FACTOR = 2.0
         private const val LUMA_SAMPLE_SIZE = 256
@@ -1025,6 +1086,17 @@ data class ManualExposureSettings(
     fun exposureTimeSeconds(): Double = exposureTimeNs / 1_000_000_000.0
     fun frameDurationSeconds(): Double = frameDurationNs / 1_000_000_000.0
 }
+
+private data class LensCameraSelection(
+    val cameraId: String,
+    val physicalCameraId: String?,
+)
+
+private data class LensCameraCandidate(
+    val cameraId: String,
+    val physicalCameraId: String,
+    val focalLength: Float,
+)
 
 data class FenetreServiceSnapshot(
     val running: Boolean,
