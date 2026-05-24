@@ -231,6 +231,24 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putInt(KEY_COOLDOWN_THERMAL_STATUS_THRESHOLD, value.value).apply()
     }
 
+    fun lowBatteryPauseEnabled(): Boolean = preferences.getBoolean(
+        KEY_LOW_BATTERY_PAUSE_ENABLED,
+        DEFAULT_LOW_BATTERY_PAUSE_ENABLED,
+    )
+
+    fun setLowBatteryPauseEnabled(value: Boolean) {
+        preferences.edit().putBoolean(KEY_LOW_BATTERY_PAUSE_ENABLED, value).apply()
+    }
+
+    fun lowBatteryPauseThresholdPercent(): Int = preferences.getInt(
+        KEY_LOW_BATTERY_PAUSE_THRESHOLD_PERCENT,
+        DEFAULT_LOW_BATTERY_PAUSE_THRESHOLD_PERCENT,
+    ).coerceIn(1, 100)
+
+    fun setLowBatteryPauseThresholdPercent(value: Int) {
+        preferences.edit().putInt(KEY_LOW_BATTERY_PAUSE_THRESHOLD_PERCENT, value.coerceIn(1, 100)).apply()
+    }
+
     fun storageManagementEnabled(): Boolean = preferences.getBoolean(
         KEY_STORAGE_MANAGEMENT_ENABLED,
         DEFAULT_STORAGE_MANAGEMENT_ENABLED,
@@ -680,6 +698,8 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_COOLDOWN_ENABLED = "cooldown_enabled"
         private const val KEY_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = "cooldown_battery_temperature_celsius"
         private const val KEY_COOLDOWN_THERMAL_STATUS_THRESHOLD = "cooldown_thermal_status_threshold"
+        private const val KEY_LOW_BATTERY_PAUSE_ENABLED = "low_battery_pause_enabled"
+        private const val KEY_LOW_BATTERY_PAUSE_THRESHOLD_PERCENT = "low_battery_pause_threshold_percent"
         private const val KEY_STORAGE_MANAGEMENT_ENABLED = "storage_management_enabled"
         private const val KEY_STORAGE_MANAGEMENT_DRY_RUN = "storage_management_dry_run"
         private const val KEY_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS = "storage_management_check_interval_seconds"
@@ -741,6 +761,8 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_COOLDOWN_ENABLED = true
         private const val DEFAULT_COOLDOWN_BATTERY_TEMPERATURE_CELSIUS = 45.0
         private const val DEFAULT_COOLDOWN_THERMAL_STATUS_THRESHOLD = 3
+        private const val DEFAULT_LOW_BATTERY_PAUSE_ENABLED = true
+        private const val DEFAULT_LOW_BATTERY_PAUSE_THRESHOLD_PERCENT = 20
         private const val DEFAULT_STORAGE_MANAGEMENT_ENABLED = false
         private const val DEFAULT_STORAGE_MANAGEMENT_DRY_RUN = true
         private const val DEFAULT_STORAGE_MANAGEMENT_CHECK_INTERVAL_SECONDS = 300

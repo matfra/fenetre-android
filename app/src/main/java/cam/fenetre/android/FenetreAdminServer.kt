@@ -145,6 +145,8 @@ class FenetreAdminServer(
                 "cooldown_enabled": ${settings.cooldownEnabled()},
                 "cooldown_battery_temperature_celsius": ${settings.cooldownBatteryTemperatureCelsius()},
                 "cooldown_thermal_status_threshold": ${settings.cooldownThermalStatusThreshold().value},
+                "low_battery_pause_enabled": ${settings.lowBatteryPauseEnabled()},
+                "low_battery_pause_threshold_percent": ${settings.lowBatteryPauseThresholdPercent()},
                 "sunrise_sunset_fast_enabled": ${settings.sunriseSunsetFastEnabled()},
                 "sunrise_sunset_fast_active": ${sunSchedule.isSunriseSunsetWindow()},
                 "sunrise_sunset_fast_interval_seconds": ${settings.sunriseSunsetFastIntervalSeconds()},
@@ -241,6 +243,12 @@ class FenetreAdminServer(
               "thermal": {
                 "cooldown_enabled": ${thermal.enabled},
                 "paused": ${thermal.paused},
+                "thermal_paused": ${thermal.thermalPaused},
+                "low_battery_paused": ${thermal.lowBatteryPaused},
+                "battery_level_percent": ${thermal.batteryLevelPercent ?: "null"},
+                "battery_charging": ${thermal.batteryCharging ?: "null"},
+                "low_battery_pause_enabled": ${thermal.lowBatteryProtectionEnabled},
+                "low_battery_threshold_percent": ${thermal.lowBatteryThresholdPercent},
                 "battery_temperature_celsius": ${thermal.batteryTemperatureCelsius ?: "null"},
                 "threshold_celsius": ${thermal.thresholdCelsius},
                 "thermal_status_threshold": ${thermal.thermalStatusThreshold},
@@ -262,6 +270,7 @@ class FenetreAdminServer(
         val fileStatus = fileStatus()
         val storageManagement = runtime.storageManagement
         val systemMetrics = systemMetrics()
+        val thermal = FenetreThermal.status(context, settings)
         val latestPictureMetrics = latestPictureMetrics()
         val now = System.currentTimeMillis()
         val ageSeconds = fileStatus.metadataCapturedAtMs?.let { maxOf(0L, (now - it) / 1000L) }
@@ -289,6 +298,9 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_thermal_paused Whether capture and timelapse scheduling are paused for cooldown.")
             appendLine("# TYPE fenetre_thermal_paused gauge")
             appendLine("fenetre_thermal_paused{$cameraLabels} ${if (runtime.thermalPaused) 1 else 0}")
+            appendLine("# HELP fenetre_low_battery_paused Whether capture and timelapse scheduling are paused because the phone is unplugged and below the battery threshold.")
+            appendLine("# TYPE fenetre_low_battery_paused gauge")
+            appendLine("fenetre_low_battery_paused{$cameraLabels} ${if (thermal.lowBatteryPaused) 1 else 0}")
             appendLine("# HELP fenetre_latest_capture_age_seconds Age of the latest captured frame.")
             appendLine("# TYPE fenetre_latest_capture_age_seconds gauge")
             appendLine("fenetre_latest_capture_age_seconds{$cameraLabels} ${ageSeconds ?: -1}")
@@ -392,6 +404,12 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_cooldown_enabled Whether thermal cooldown protection is enabled.")
             appendLine("# TYPE fenetre_cooldown_enabled gauge")
             appendLine("fenetre_cooldown_enabled{$cameraLabels} ${if (settings.cooldownEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_low_battery_pause_enabled Whether low-battery unplugged pause protection is enabled.")
+            appendLine("# TYPE fenetre_low_battery_pause_enabled gauge")
+            appendLine("fenetre_low_battery_pause_enabled{$cameraLabels} ${if (settings.lowBatteryPauseEnabled()) 1 else 0}")
+            appendLine("# HELP fenetre_low_battery_pause_threshold_percent Configured battery percent threshold for unplugged low-battery pause.")
+            appendLine("# TYPE fenetre_low_battery_pause_threshold_percent gauge")
+            appendLine("fenetre_low_battery_pause_threshold_percent{$cameraLabels} ${settings.lowBatteryPauseThresholdPercent()}")
             appendLine("# HELP fenetre_sunrise_sunset_fast_enabled Whether fast sunrise/sunset capture is enabled.")
             appendLine("# TYPE fenetre_sunrise_sunset_fast_enabled gauge")
             appendLine("fenetre_sunrise_sunset_fast_enabled{$cameraLabels} ${if (settings.sunriseSunsetFastEnabled()) 1 else 0}")

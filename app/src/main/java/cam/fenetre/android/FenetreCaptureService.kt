@@ -159,7 +159,7 @@ class FenetreCaptureService : LifecycleService() {
     private fun buildDailyTimelapse() {
         startServers()
         if (pauseForCooldownIfNeeded()) {
-            startForeground(NOTIFICATION_ID, buildNotification("Cooling down; daily timelapse paused"))
+            startForeground(NOTIFICATION_ID, buildNotification("Paused; daily timelapse deferred"))
             return
         }
         startForeground(NOTIFICATION_ID, buildNotification("Building daily timelapse"))
@@ -170,7 +170,7 @@ class FenetreCaptureService : LifecycleService() {
     private fun buildDaylight() {
         startServers()
         if (pauseForCooldownIfNeeded()) {
-            startForeground(NOTIFICATION_ID, buildNotification("Cooling down; daylight build paused"))
+            startForeground(NOTIFICATION_ID, buildNotification("Paused; daylight build deferred"))
             return
         }
         startForeground(NOTIFICATION_ID, buildNotification("Building daylight bands"))
@@ -678,11 +678,17 @@ class FenetreCaptureService : LifecycleService() {
             return false
         }
         val temperatureText = status.batteryTemperatureCelsius?.let { String.format("%.1fC", it) } ?: "unknown temp"
+        val batteryText = status.batteryLevelPercent?.let { String.format("%.0f%%", it) } ?: "unknown battery"
         Log.w(
             TAG,
-            "Thermal cooldown active: battery=$temperatureText threshold=${status.thresholdCelsius}C thermal=${status.androidThermalStatus}"
+            "Capture pause active: temp=$temperatureText tempThreshold=${status.thresholdCelsius}C thermal=${status.androidThermalStatus} battery=$batteryText charging=${status.batteryCharging}"
         )
-        updateNotification("Cooling down: $temperatureText >= ${status.thresholdCelsius}C")
+        val message = if (status.lowBatteryPaused) {
+            "Battery pause: $batteryText < ${status.lowBatteryThresholdPercent}% and not charging"
+        } else {
+            "Cooling down: $temperatureText >= ${status.thresholdCelsius}C"
+        }
+        updateNotification(message)
         scheduleCooldownCheck()
         return true
     }

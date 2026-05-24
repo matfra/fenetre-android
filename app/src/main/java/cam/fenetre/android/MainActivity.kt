@@ -241,7 +241,17 @@ class MainActivity : ComponentActivity() {
             it.toDoubleOrNull()?.let(cameraSettings::setCooldownBatteryTemperatureCelsius)
         })
         content.addView(thermalStatusThresholdSpinner())
-        content.addView(helpText("When enabled, capture and timelapse work pause while the battery is at or above this temperature. Pick a thermal state to also pause when Android reports that state or higher."))
+        content.addView(settingCheckBox("Pause when unplugged and battery is low", cameraSettings.lowBatteryPauseEnabled()) {
+            cameraSettings.setLowBatteryPauseEnabled(it)
+        })
+        content.addView(settingEditText(
+            "Low battery pause threshold %",
+            cameraSettings.lowBatteryPauseThresholdPercent().toString(),
+            InputType.TYPE_CLASS_NUMBER,
+        ) {
+            it.toIntOrNull()?.let(cameraSettings::setLowBatteryPauseThresholdPercent)
+        })
+        content.addView(helpText("Capture and timelapse work pause while thermal cooldown is active, or while the phone is not charging and battery is below the low-battery threshold."))
 
         content.addView(sectionTitle("Storage management"))
         content.addView(settingCheckBox("Storage management", cameraSettings.storageManagementEnabled()) {
@@ -570,7 +580,8 @@ class MainActivity : ComponentActivity() {
         val battery = FenetreThermal.batteryStatus(this)
         serviceStateText.text = if (snapshot.running) "Running" else "Stopped"
         captureStateText.text = when {
-            thermal.paused -> "Paused for cooldown"
+            thermal.lowBatteryPaused -> "Paused for low battery"
+            thermal.thermalPaused -> "Paused for cooldown"
             snapshot.captureInProgress -> "In progress"
             snapshot.running -> "Idle"
             else -> "Not started"
@@ -598,13 +609,19 @@ class MainActivity : ComponentActivity() {
 
     private fun thermalStateTextValue(thermal: FenetreThermalStatus, batteryTemperatureCelsius: Double?): String {
         val temperature = batteryTemperatureCelsius?.let { String.format(Locale.US, "%.1fC", it) } ?: "temp n/a"
+        val battery = thermal.batteryLevelPercent?.let { String.format(Locale.US, "%.0f%%", it) } ?: "battery n/a"
+        val charging = when (thermal.batteryCharging) {
+            true -> "charging"
+            false -> "not charging"
+            null -> "charging n/a"
+        }
         val androidStatus = thermal.androidThermalStatus?.toString() ?: "n/a"
         val threshold = if (thermal.thermalStatusThreshold > 0) {
             "state >= ${thermal.thermalStatusThreshold}"
         } else {
             "manual"
         }
-        return "$temperature, Android $androidStatus, $threshold"
+        return "$temperature, $battery, $charging, Android $androidStatus, $threshold"
     }
 
     private fun storageStateTextValue(): String {
@@ -907,6 +924,11 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
+        val lowBattery = if (cameraSettings.lowBatteryPauseEnabled()) {
+            "; low battery ${cameraSettings.lowBatteryPauseThresholdPercent()}%"
+        } else {
+            ""
+        }
         val storageManagement = if (cameraSettings.storageManagementEnabled()) {
             "; storage ${cameraSettings.storageManagementMaxSizeGb()}GB"
         } else {
@@ -924,7 +946,7 @@ class MainActivity : ComponentActivity() {
         }
         val captureSize = cameraSettings.captureJpegSize().ifEmpty { "largest" }
         val outputSize = cameraSettings.outputResizeSize().ifEmpty { "native" }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; capture $captureSize; output $outputSize; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$storageManagement"
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; capture $captureSize; output $outputSize; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$lowBattery$storageManagement"
     }
 
     private fun requestNeededPermissions() {
