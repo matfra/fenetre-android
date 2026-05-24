@@ -157,6 +157,10 @@ class FenetreAdminServer(
                 "camera2_night_scene_available": $camera2NightSceneAvailable,
                 "camerax_night_extension_available": ${runtime.cameraXNightExtensionAvailable},
                 "focus_infinity_enabled": ${settings.focusInfinityEnabled()},
+                "native_sensor_size": ${runtime.selectedCameraNativeSensorSize?.let { jsonString("${it.width}x${it.height}") } ?: "null"},
+                "capture_jpeg_size": ${jsonString(settings.captureJpegSize())},
+                "selected_capture_jpeg_size": ${runtime.selectedCaptureJpegSize?.let { jsonString("${it.width}x${it.height}") } ?: "null"},
+                "output_resize_size": ${jsonString(settings.outputResizeSize())},
                 "night_exposure_boost_stops": ${settings.nightExposureBoostStops()},
                 "night_exposure_boost_twilight_buffer_minutes": ${settings.nightExposureBoostTwilightBufferMinutes()},
                 "night_exposure_boost_active": $manualNightBoostActive,
@@ -406,6 +410,18 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_vignette_correction_strength Configured radial vignette correction strength.")
             appendLine("# TYPE fenetre_vignette_correction_strength gauge")
             appendLine("fenetre_vignette_correction_strength{$cameraLabels} ${settings.vignetteCorrectionStrength()}")
+            appendLine("# HELP fenetre_capture_jpeg_width Selected JPEG capture width in pixels.")
+            appendLine("# TYPE fenetre_capture_jpeg_width gauge")
+            appendLine("fenetre_capture_jpeg_width{$cameraLabels} ${runtime.selectedCaptureJpegSize?.width ?: 0}")
+            appendLine("# HELP fenetre_capture_jpeg_height Selected JPEG capture height in pixels.")
+            appendLine("# TYPE fenetre_capture_jpeg_height gauge")
+            appendLine("fenetre_capture_jpeg_height{$cameraLabels} ${runtime.selectedCaptureJpegSize?.height ?: 0}")
+            appendLine("# HELP fenetre_native_sensor_width Selected lens native sensor width in pixels.")
+            appendLine("# TYPE fenetre_native_sensor_width gauge")
+            appendLine("fenetre_native_sensor_width{$cameraLabels} ${runtime.selectedCameraNativeSensorSize?.width ?: 0}")
+            appendLine("# HELP fenetre_native_sensor_height Selected lens native sensor height in pixels.")
+            appendLine("# TYPE fenetre_native_sensor_height gauge")
+            appendLine("fenetre_native_sensor_height{$cameraLabels} ${runtime.selectedCameraNativeSensorSize?.height ?: 0}")
             appendLine("# HELP fenetre_camera2_night_scene_available Whether Camera2 advertises night scene mode.")
             appendLine("# TYPE fenetre_camera2_night_scene_available gauge")
             appendLine("fenetre_camera2_night_scene_available{$cameraLabels} ${if (camera2NightSceneAvailable) 1 else 0}")
@@ -860,6 +876,8 @@ data class FenetreRuntimeStatus(
     val cameraXNightExtensionAvailable: Boolean = false,
     val selectedCameraId: String? = null,
     val selectedPhysicalCameraId: String? = null,
+    val selectedCaptureJpegSize: android.util.Size? = null,
+    val selectedCameraNativeSensorSize: android.util.Size? = null,
     val selectedCameraMaxExposureSeconds: Double? = null,
     val selectedCameraVendorMaxExposureSeconds: Double? = null,
     val captureProcessingTimeSeconds: Double? = null,

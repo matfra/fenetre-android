@@ -48,6 +48,7 @@ class FenetreCaptureService : LifecycleService() {
     private lateinit var storageManager: FenetreStorageManager
     private lateinit var overlays: FenetreOverlays
     private lateinit var vignetteCorrection: FenetreVignetteCorrection
+    private lateinit var outputResize: FenetreOutputResize
     private lateinit var ssim: FenetreSsim
     private lateinit var sunSchedule: FenetreSunSchedule
     private var extensionsManager: ExtensionsManager? = null
@@ -61,6 +62,7 @@ class FenetreCaptureService : LifecycleService() {
     private var adaptiveCaptureMode = ExposureMode.PHONE_AUTO
     private var selectedCameraId: String? = null
     private var selectedPhysicalCameraId: String? = null
+    private var selectedCaptureJpegSize: Size? = null
     private var manualExposureSettings: ManualExposureSettings? = null
     private var captureInProgress = false
     private var captureGeneration = 0
@@ -92,6 +94,7 @@ class FenetreCaptureService : LifecycleService() {
         storageManager = FenetreStorageManager(storage, cameraSettings)
         overlays = FenetreOverlays(cameraSettings)
         vignetteCorrection = FenetreVignetteCorrection(cameraSettings)
+        outputResize = FenetreOutputResize(cameraSettings)
         ssim = FenetreSsim(cameraSettings)
         sunSchedule = FenetreSunSchedule(cameraSettings)
         createNotificationChannel()
@@ -202,6 +205,8 @@ class FenetreCaptureService : LifecycleService() {
                     cameraXNightExtensionAvailable = cameraXNightExtensionAvailable(),
                     selectedCameraId = selectedCameraId,
                     selectedPhysicalCameraId = selectedPhysicalCameraId,
+                    selectedCaptureJpegSize = selectedCaptureJpegSize,
+                    selectedCameraNativeSensorSize = selectedCameraNativeSensorSize(),
                     selectedCameraMaxExposureSeconds = selectedCameraMaxExposureSeconds(),
                     selectedCameraVendorMaxExposureSeconds = selectedCameraVendorMaxExposureSeconds(),
                     captureProcessingTimeSeconds = lastCaptureProcessingTimeSeconds,
@@ -284,7 +289,8 @@ class FenetreCaptureService : LifecycleService() {
             .setCaptureMode(captureMode)
             .setJpegQuality(92)
             .setTargetRotation(Surface.ROTATION_90)
-        selectedFourThreeJpegSize()?.let { builder.setTargetResolution(it) }
+        selectedCaptureJpegSize = selectedJpegCaptureSize()
+        selectedCaptureJpegSize?.let { builder.setTargetResolution(it) }
         val extender = Camera2Interop.Extender(builder)
         if (activeNightStrategy != NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION) {
             selectedPhysicalCameraId?.let { extender.setPhysicalCameraId(it) }
@@ -508,6 +514,7 @@ class FenetreCaptureService : LifecycleService() {
         val vignetteCorrectionApplied = captureMode == ExposureMode.AUTO &&
             activeNightCaptureStrategy() == NightCaptureStrategy.MANUAL_ADAPTIVE &&
             vignetteCorrection.apply(photoFile)
+        val outputResizeApplied = outputResize.apply(photoFile)
         val ssimResult = updateSsim(photoFile)
         overlays.apply(photoFile)
         photoFile.copyTo(storage.latestFile(), overwrite = true)
@@ -525,6 +532,7 @@ class FenetreCaptureService : LifecycleService() {
             exposureComposite,
             imageBrightness,
             vignetteCorrectionApplied,
+            outputResizeApplied,
             ssimResult,
             captureExif,
         )
@@ -875,7 +883,19 @@ class FenetreCaptureService : LifecycleService() {
             ?.let { it / 1_000_000_000.0 }
     }
 
-    private fun selectedFourThreeJpegSize(): Size? {
+    private fun selectedCameraNativeSensorSize(): Size? {
+        return try {
+            val cameraManager = getSystemService(CameraManager::class.java)
+            val cameraId = selectedPhysicalCameraId ?: selectedCameraId ?: return null
+            cameraManager.getCameraCharacteristics(cameraId)
+                .get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to read native sensor size", exception)
+            null
+        }
+    }
+
+    private fun selectedJpegCaptureSize(): Size? {
         return try {
             val cameraManager = getSystemService(CameraManager::class.java)
             val cameraId = selectedPhysicalCameraId ?: selectedCameraId ?: return null
@@ -884,13 +904,30 @@ class FenetreCaptureService : LifecycleService() {
                 .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                 ?.getOutputSizes(ImageFormat.JPEG)
                 ?: return null
-            sizes
+            val fourThreeSizes = sizes
                 .filter { size -> kotlin.math.abs(size.width.toDouble() / size.height.toDouble() - FOUR_THREE_ASPECT_RATIO) < ASPECT_RATIO_TOLERANCE }
-                .maxByOrNull { size -> size.width.toLong() * size.height.toLong() }
+                .sortedByDescending { size -> size.width.toLong() * size.height.toLong() }
+            val requestedSize = parseSize(cameraSettings.captureJpegSize())
+            if (requestedSize == null) {
+                fourThreeSizes.firstOrNull()
+            } else {
+                fourThreeSizes.firstOrNull { size -> size.width == requestedSize.width && size.height == requestedSize.height }
+                    ?: fourThreeSizes.firstOrNull()
+            }
         } catch (exception: Exception) {
-            Log.w(TAG, "Unable to select 4:3 JPEG size", exception)
+            Log.w(TAG, "Unable to select JPEG capture size", exception)
             null
         }
+    }
+
+    private fun parseSize(value: String): Size? {
+        val parts = value.split("x")
+        if (parts.size != 2) {
+            return null
+        }
+        val width = parts[0].toIntOrNull() ?: return null
+        val height = parts[1].toIntOrNull() ?: return null
+        return if (width > 0 && height > 0) Size(width, height) else null
     }
 
     private fun samsungVendorExposureTimeRange(

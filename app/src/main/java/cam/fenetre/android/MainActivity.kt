@@ -4,6 +4,9 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.ImageFormat
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
@@ -13,6 +16,7 @@ import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
+import android.util.Size
 import android.view.Gravity
 import android.view.View
 import android.widget.AdapterView
@@ -38,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var latestCaptureAgeText: TextView
     private lateinit var thermalStateText: TextView
     private lateinit var storageStateText: TextView
+    private lateinit var nativeSensorSizeTextView: TextView
     private lateinit var notificationStateText: TextView
     private lateinit var storage: FenetreStorage
     private lateinit var cameraSettings: FenetreCameraSettings
@@ -119,6 +124,7 @@ class MainActivity : ComponentActivity() {
 
         content.addView(sectionTitle("Lens"))
         content.addView(lensGroup())
+        content.addView(nativeSensorSizeView())
         content.addView(settingCheckBox("Lock focus to infinity", cameraSettings.focusInfinityEnabled()) {
             cameraSettings.setFocusInfinityEnabled(it)
         })
@@ -129,6 +135,13 @@ class MainActivity : ComponentActivity() {
 
         content.addView(sectionTitle("Rotation"))
         content.addView(rotationGroup())
+
+        content.addView(sectionTitle("Output"))
+        content.addView(captureJpegSizeSpinner())
+        content.addView(settingEditText("Postprocess output size", cameraSettings.outputResizeSize()) {
+            cameraSettings.setOutputResizeSize(it)
+        })
+        content.addView(helpText("Leave empty for native output. Use WIDTHxHEIGHT, for example 2000x1500."))
 
         content.addView(sectionTitle("Deployment"))
         content.addView(settingEditText("Camera name", cameraSettings.cameraName()) {
@@ -418,6 +431,7 @@ class MainActivity : ComponentActivity() {
             LensMode.entries.forEach { mode ->
                 addView(radioButton(mode.label, mode == cameraSettings.lensMode()) {
                     cameraSettings.setLensMode(mode)
+                    nativeSensorSizeTextView.text = "Native sensor: ${nativeSensorSizeText(mode)}"
                     updateStatus("${settingsSummary()}; apply restart when ready")
                 })
             }
@@ -445,6 +459,43 @@ class MainActivity : ComponentActivity() {
                     updateStatus("${settingsSummary()}; apply restart when ready")
                 })
             }
+        }
+    }
+
+    private fun captureJpegSizeSpinner(): LinearLayout {
+        val values = captureJpegSizeOptions()
+        val current = cameraSettings.captureJpegSize()
+        val selectedIndex = values.indexOfFirst { it.value == current }.takeIf { it >= 0 } ?: 0
+        val spinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                values.map { it.label },
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            setSelection(selectedIndex, false)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    cameraSettings.setCaptureJpegSize(values[position].value)
+                    updateStatus("${settingsSummary()}; apply restart when ready")
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 4, 0, 4)
+            addView(TextView(this@MainActivity).apply {
+                text = "Capture JPEG size"
+                textSize = 15f
+                setTextColor(0xff374151.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.75f)
+            })
+            addView(spinner)
         }
     }
 
@@ -573,6 +624,93 @@ class MainActivity : ComponentActivity() {
     private fun formatBytes(bytes: Long): String {
         val gb = bytes / 1_000_000_000.0
         return String.format(Locale.US, "%.1f GB", gb)
+    }
+
+    private fun captureJpegSizeOptions(): List<CaptureJpegSizeOption> {
+        val sizes = availableFourThreeJpegSizes(cameraSettings.lensMode())
+        return listOf(CaptureJpegSizeOption("", "Largest advertised 4:3 JPEG")) +
+            sizes.map { size -> CaptureJpegSizeOption("${size.width}x${size.height}", "${size.width} x ${size.height}") }
+    }
+
+    private fun availableFourThreeJpegSizes(mode: LensMode): List<Size> {
+        return try {
+            val cameraManager = getSystemService(CameraManager::class.java)
+            val cameraId = selectedCameraIdForLensMode(cameraManager, mode) ?: return emptyList()
+            val sizes = cameraManager.getCameraCharacteristics(cameraId)
+                .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                ?.getOutputSizes(ImageFormat.JPEG)
+                ?: return emptyList()
+            sizes
+                .filter { size -> kotlin.math.abs(size.width.toDouble() / size.height.toDouble() - FOUR_THREE_ASPECT_RATIO) < ASPECT_RATIO_TOLERANCE }
+                .distinctBy { size -> "${size.width}x${size.height}" }
+                .sortedByDescending { size -> size.width.toLong() * size.height.toLong() }
+        } catch (exception: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun selectedCameraIdForLensMode(cameraManager: CameraManager, mode: LensMode): String? {
+        val physicalBackCameras = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            cameraManager.cameraIdList.flatMap { logicalId ->
+                val logicalCharacteristics = cameraManager.getCameraCharacteristics(logicalId)
+                if (logicalCharacteristics.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_BACK) {
+                    return@flatMap emptyList()
+                }
+                logicalCharacteristics.physicalCameraIds.mapNotNull { physicalId ->
+                    val physicalCharacteristics = cameraManager.getCameraCharacteristics(physicalId)
+                    val focalLength = physicalCharacteristics
+                        .get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                        ?.firstOrNull()
+                        ?: return@mapNotNull null
+                    physicalId to focalLength
+                }
+            }.sortedBy { it.second }
+        } else {
+            emptyList()
+        }
+        if (physicalBackCameras.isNotEmpty()) {
+            return when (mode) {
+                LensMode.ULTRA_WIDE -> physicalBackCameras.first().first
+                LensMode.WIDE -> physicalBackCameras[physicalBackCameras.size / 2].first
+                LensMode.TELE -> physicalBackCameras.last().first
+            }
+        }
+
+        val backCameras = cameraManager.cameraIdList.mapNotNull { id ->
+            val characteristics = cameraManager.getCameraCharacteristics(id)
+            if (characteristics.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_BACK) {
+                return@mapNotNull null
+            }
+            val focalLength = characteristics
+                .get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                ?.firstOrNull()
+                ?: return@mapNotNull null
+            id to focalLength
+        }.sortedBy { it.second }
+
+        return when (mode) {
+            LensMode.ULTRA_WIDE -> backCameras.firstOrNull()?.first
+            LensMode.WIDE -> backCameras.getOrNull(backCameras.size / 2)?.first
+            LensMode.TELE -> backCameras.lastOrNull()?.first
+        }
+    }
+
+    private fun nativeSensorSizeText(mode: LensMode): String {
+        return try {
+            val cameraManager = getSystemService(CameraManager::class.java)
+            val cameraId = selectedCameraIdForLensMode(cameraManager, mode) ?: return "unavailable"
+            val size = cameraManager.getCameraCharacteristics(cameraId)
+                .get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+                ?: return "unavailable"
+            "${size.width} x ${size.height}"
+        } catch (exception: Exception) {
+            "unavailable"
+        }
+    }
+
+    private fun nativeSensorSizeView(): TextView {
+        nativeSensorSizeTextView = helpText("Native sensor: ${nativeSensorSizeText(cameraSettings.lensMode())}")
+        return nativeSensorSizeTextView
     }
 
     private fun sectionTitle(title: String): TextView {
@@ -784,7 +922,9 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$storageManagement"
+        val captureSize = cameraSettings.captureJpegSize().ifEmpty { "largest" }
+        val outputSize = cameraSettings.outputResizeSize().ifEmpty { "native" }
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; capture $captureSize; output $outputSize; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$storageManagement"
     }
 
     private fun requestNeededPermissions() {
@@ -898,5 +1038,12 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val SERVICE_RESTART_DELAY_MS = 500L
         private const val STATE_REFRESH_INTERVAL_MS = 5_000L
+        private const val FOUR_THREE_ASPECT_RATIO = 4.0 / 3.0
+        private const val ASPECT_RATIO_TOLERANCE = 0.02
     }
 }
+
+private data class CaptureJpegSizeOption(
+    val value: String,
+    val label: String,
+)

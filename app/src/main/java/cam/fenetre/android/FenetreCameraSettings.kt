@@ -58,6 +58,34 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putInt(KEY_ROTATION_DEGREES, normalized).apply()
     }
 
+    fun outputResizeSize(): String {
+        return preferences.getString(KEY_OUTPUT_RESIZE_SIZE, DEFAULT_OUTPUT_RESIZE_SIZE)
+            ?.trim()
+            ?.takeIf { it.isEmpty() || IMAGE_SIZE_PATTERN.matches(it) }
+            ?: DEFAULT_OUTPUT_RESIZE_SIZE
+    }
+
+    fun setOutputResizeSize(value: String) {
+        val cleaned = value.trim()
+        preferences.edit()
+            .putString(KEY_OUTPUT_RESIZE_SIZE, cleaned.takeIf { it.isEmpty() || IMAGE_SIZE_PATTERN.matches(it) }.orEmpty())
+            .apply()
+    }
+
+    fun captureJpegSize(): String {
+        return preferences.getString(KEY_CAPTURE_JPEG_SIZE, DEFAULT_CAPTURE_JPEG_SIZE)
+            ?.trim()
+            ?.takeIf { IMAGE_SIZE_PATTERN.matches(it) }
+            ?: DEFAULT_CAPTURE_JPEG_SIZE
+    }
+
+    fun setCaptureJpegSize(value: String) {
+        val cleaned = value.trim()
+        preferences.edit()
+            .putString(KEY_CAPTURE_JPEG_SIZE, cleaned.takeIf { IMAGE_SIZE_PATTERN.matches(it) }.orEmpty())
+            .apply()
+    }
+
     fun exposureMode(): ExposureMode {
         val name = preferences.getString(KEY_EXPOSURE_MODE, ExposureMode.AUTO.name)
         return ExposureMode.entries.firstOrNull { it.name == name } ?: ExposureMode.AUTO
@@ -633,6 +661,8 @@ class FenetreCameraSettings(context: Context) {
     companion object {
         private const val KEY_LENS_MODE = "lens_mode"
         private const val KEY_ROTATION_DEGREES = "rotation_degrees"
+        private const val KEY_CAPTURE_JPEG_SIZE = "capture_jpeg_size"
+        private const val KEY_OUTPUT_RESIZE_SIZE = "output_resize_size"
         private const val KEY_EXPOSURE_MODE = "exposure_mode"
         private const val KEY_CAMERA_NAME = "camera_name"
         private const val KEY_DEPLOYMENT_NAME = "deployment_name"
@@ -695,6 +725,8 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_OVERLAY_LATITUDE = "overlay_latitude"
         private const val KEY_OVERLAY_LONGITUDE = "overlay_longitude"
         private const val DEFAULT_ROTATION_DEGREES = 0
+        private const val DEFAULT_CAPTURE_JPEG_SIZE = ""
+        private const val DEFAULT_OUTPUT_RESIZE_SIZE = ""
         private const val DEFAULT_CAMERA_NAME_FALLBACK = "android-camera"
         private const val DEFAULT_DEPLOYMENT_NAME = "p6p.fenetre.cam"
         private const val DEFAULT_PUBLIC_BASE_URL = "https://p6p.fenetre.cam/"
@@ -752,5 +784,6 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_OVERLAY_TIMEZONE = "America/Los_Angeles"
         private const val DEFAULT_OVERLAY_LATITUDE = 37.6
         private const val DEFAULT_OVERLAY_LONGITUDE = -122.4
+        private val IMAGE_SIZE_PATTERN = Regex("""\d+x\d+""")
     }
 }
