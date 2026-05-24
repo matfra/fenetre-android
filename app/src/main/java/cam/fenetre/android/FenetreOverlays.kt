@@ -105,13 +105,16 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
             val sunriseX = left + overlayWidth * (sunWindow.sunriseHour / 24.0).toFloat()
             val sunsetX = left + overlayWidth * (sunWindow.sunsetHour / 24.0).toFloat()
             if (sunsetX > sunriseX) {
-                val arcHeight = overlayHeight * (0.15f + 0.75f * sunWindow.maxElevationRatio.toFloat())
                 val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = Color.argb(175, 255, 181, 64)
                     style = Paint.Style.STROKE
                     strokeWidth = max(4f, overlayWidth / 180f)
                 }
-                val arcRect = RectF(sunriseX, bottom - arcHeight * 2f, sunsetX, bottom)
+                val strokeInset = arcPaint.strokeWidth / 2f
+                val baseline = bottom - max(5f, strokeInset + 2f)
+                val maxArcHeight = (baseline - top - strokeInset).coerceAtLeast(0f)
+                val arcHeight = maxArcHeight * sunWindow.maxElevationRatio.toFloat()
+                val arcRect = RectF(sunriseX, baseline - arcHeight, sunsetX, baseline + arcHeight)
                 canvas.drawArc(arcRect, 180f, 180f, false, arcPaint)
             }
         }

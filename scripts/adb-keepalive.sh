@@ -11,28 +11,29 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   exit 1
 fi
 
-mapfile -t DEVICES < <(
-  awk '
-    /^[[:space:]]*-[[:space:]]*name:/ { name=$3 }
-    /^[[:space:]]*ip:/ { ip=$2 }
-    /^[[:space:]]*port:/ {
-      port=$2
-      if (name != "" && ip != "" && port != "") {
-        print name "|" ip "|" port
-      }
-      name=""; ip=""; port=""
-    }
-  ' "$CONFIG_FILE"
-)
-
-if [[ "${#DEVICES[@]}" -eq 0 ]]; then
-  echo "No devices found in $CONFIG_FILE" >&2
-  exit 1
-fi
-
 echo "ADB keepalive using $CONFIG_FILE every ${INTERVAL_SECONDS}s"
 
 while true; do
+  mapfile -t DEVICES < <(
+    awk '
+      /^[[:space:]]*-[[:space:]]*name:/ { name=$3 }
+      /^[[:space:]]*ip:/ { ip=$2 }
+      /^[[:space:]]*port:/ {
+        port=$2
+        if (name != "" && ip != "" && port != "") {
+          print name "|" ip "|" port
+        }
+        name=""; ip=""; port=""
+      }
+    ' "$CONFIG_FILE"
+  )
+
+  if [[ "${#DEVICES[@]}" -eq 0 ]]; then
+    echo "$(date -Is) no devices found in $CONFIG_FILE" >&2
+    sleep "$INTERVAL_SECONDS"
+    continue
+  fi
+
   for device in "${DEVICES[@]}"; do
     IFS="|" read -r name ip port <<< "$device"
     serial="${ip}:${port}"
