@@ -146,9 +146,9 @@ class FenetreSsim(private val settings: FenetreCameraSettings) {
     }
 
     private fun cropRect(width: Int, height: Int): Rect? {
-        val values = settings.ssimArea().split(",").mapNotNull { it.trim().toDoubleOrNull() }
+        val values = settings.skyArea().split(",").mapNotNull { it.trim().toDoubleOrNull() }
         if (values.size != 4) {
-            Log.w(TAG, "Invalid SSIM area ${settings.ssimArea()}; using full image")
+            Log.w(TAG, "Invalid sky area ${settings.skyArea()}; using full image")
             return Rect(0, 0, width, height)
         }
         val ratioCoordinates = values.all { it <= 1.0 }
@@ -163,7 +163,7 @@ class FenetreSsim(private val settings: FenetreCameraSettings) {
             bottom.coerceIn(0, height),
         )
         if (crop.width() <= 0 || crop.height() <= 0) {
-            Log.w(TAG, "Invalid SSIM crop ${settings.ssimArea()} for image ${width}x$height")
+            Log.w(TAG, "Invalid sky crop ${settings.skyArea()} for image ${width}x$height")
             return null
         }
         return crop

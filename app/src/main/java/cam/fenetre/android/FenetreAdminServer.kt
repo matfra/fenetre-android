@@ -168,6 +168,7 @@ class FenetreAdminServer(
                 "night_exposure_boost_active": $manualNightBoostActive,
                 "manual_night_target_luma": ${settings.manualNightTargetLuma()},
                 "manual_to_auto_luma_margin": ${settings.manualToAutoLumaMargin()},
+                "night_adaptive_iso_threshold": ${settings.nightAdaptiveIsoThreshold()},
                 "vignette_correction_enabled": ${settings.vignetteCorrectionEnabled()},
                 "vignette_correction_strength": ${settings.vignetteCorrectionStrength()},
                 "vignette_correction_power": ${settings.vignetteCorrectionPower()},
@@ -181,7 +182,7 @@ class FenetreAdminServer(
                 "ssim_enabled": ${settings.ssimEnabled()},
                 "ssim_value": ${runtime.ssimValue ?: "null"},
                 "ssim_target": ${settings.ssimSetpoint()},
-                "ssim_area": ${jsonString(settings.ssimArea())},
+                "sky_area": ${jsonString(settings.skyArea())},
                 "ssim_interval_seconds": ${runtime.ssimIntervalSeconds},
                 "ssim_min_interval_seconds": ${settings.ssimMinIntervalSeconds()},
                 "ssim_max_interval_seconds": ${settings.ssimMaxIntervalSeconds()},
@@ -346,7 +347,7 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_ssim_enabled Whether SSIM adaptive interval is enabled.")
             appendLine("# TYPE fenetre_ssim_enabled gauge")
             appendLine("fenetre_ssim_enabled{$cameraLabels} ${if (settings.ssimEnabled()) 1 else 0}")
-            appendLine("# HELP fenetre_star_count Latest star count in the SSIM area.")
+            appendLine("# HELP fenetre_star_count Latest star count in the sky area.")
             appendLine("# TYPE fenetre_star_count gauge")
             appendLine("fenetre_star_count{$cameraLabels} ${runtime.starCount}")
             appendLine("# HELP fenetre_stars_detected Whether stars were detected in the latest capture.")
@@ -422,6 +423,9 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_manual_to_auto_luma_margin Luma hysteresis margin for switching from manual adaptive back to phone auto.")
             appendLine("# TYPE fenetre_manual_to_auto_luma_margin gauge")
             appendLine("fenetre_manual_to_auto_luma_margin{$cameraLabels} ${settings.manualToAutoLumaMargin()}")
+            appendLine("# HELP fenetre_night_adaptive_iso_threshold Phone-auto ISO threshold for switching into manual adaptive night capture.")
+            appendLine("# TYPE fenetre_night_adaptive_iso_threshold gauge")
+            appendLine("fenetre_night_adaptive_iso_threshold{$cameraLabels} ${settings.nightAdaptiveIsoThreshold()}")
             appendLine("# HELP fenetre_vignette_correction_enabled Whether radial vignette correction is enabled.")
             appendLine("# TYPE fenetre_vignette_correction_enabled gauge")
             appendLine("fenetre_vignette_correction_enabled{$cameraLabels} ${if (settings.vignetteCorrectionEnabled()) 1 else 0}")

@@ -415,6 +415,15 @@ class FenetreCameraSettings(context: Context) {
             .apply()
     }
 
+    fun nightAdaptiveIsoThreshold(): Int = preferences.getInt(
+        KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD,
+        DEFAULT_NIGHT_ADAPTIVE_ISO_THRESHOLD,
+    ).coerceIn(25, 6400)
+
+    fun setNightAdaptiveIsoThreshold(value: Int) {
+        preferences.edit().putInt(KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD, value.coerceIn(25, 6400)).apply()
+    }
+
     fun vignetteCorrectionEnabled(): Boolean = preferences.getBoolean(
         KEY_VIGNETTE_CORRECTION_ENABLED,
         defaultVignetteCorrectionEnabled(),
@@ -472,12 +481,12 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit().putFloat(KEY_SSIM_SETPOINT, value.coerceIn(0.0, 1.0).toFloat()).apply()
     }
 
-    fun ssimArea(): String = cleanText(
+    fun skyArea(): String = cleanText(
         preferences.getString(KEY_SSIM_AREA, DEFAULT_SSIM_AREA),
         DEFAULT_SSIM_AREA,
     )
 
-    fun setSsimArea(value: String) {
+    fun setSkyArea(value: String) {
         preferences.edit().putString(KEY_SSIM_AREA, cleanText(value, DEFAULT_SSIM_AREA)).apply()
     }
 
@@ -718,6 +727,7 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_NIGHT_CAPTURE_STRATEGY = "night_capture_strategy"
         private const val KEY_MANUAL_NIGHT_TARGET_LUMA = "manual_night_target_luma"
         private const val KEY_MANUAL_TO_AUTO_LUMA_MARGIN = "manual_to_auto_luma_margin"
+        private const val KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD = "night_adaptive_iso_threshold"
         private const val KEY_VIGNETTE_CORRECTION_ENABLED = "vignette_correction_enabled"
         private const val KEY_VIGNETTE_CORRECTION_STRENGTH = "vignette_correction_strength"
         private const val KEY_VIGNETTE_CORRECTION_POWER = "vignette_correction_power"
@@ -781,6 +791,7 @@ class FenetreCameraSettings(context: Context) {
         private val DEFAULT_NIGHT_CAPTURE_STRATEGY = NightCaptureStrategy.MANUAL_ADAPTIVE
         private const val DEFAULT_MANUAL_NIGHT_TARGET_LUMA = 0.15
         private const val DEFAULT_MANUAL_TO_AUTO_LUMA_MARGIN = 0.05
+        private const val DEFAULT_NIGHT_ADAPTIVE_ISO_THRESHOLD = 400
         private const val DEFAULT_VIGNETTE_CORRECTION_STRENGTH = 0.2
         private const val DEFAULT_VIGNETTE_CORRECTION_POWER = 1.2
         private const val DEFAULT_VIGNETTE_CORRECTION_RADIUS = 0.95

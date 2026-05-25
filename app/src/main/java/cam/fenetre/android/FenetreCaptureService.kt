@@ -547,7 +547,7 @@ class FenetreCaptureService : LifecycleService() {
             storageManager.maybeSchedule()
         }
         updateNotification("Last capture: ${photoFile.name}; web: ${webServer?.url().orEmpty()}")
-        val modeChanged = updateAdaptiveCaptureMode(imageBrightness)
+        val modeChanged = updateAdaptiveCaptureMode(imageBrightness, captureExif.iso)
         val nextManualExposure = nextManualExposureSettings(
             captureExif,
             imageBrightness,
@@ -714,17 +714,18 @@ class FenetreCaptureService : LifecycleService() {
         return exposureMode
     }
 
-    private fun updateAdaptiveCaptureMode(imageBrightness: Double?): Boolean {
+    private fun updateAdaptiveCaptureMode(imageBrightness: Double?, iso: Int?): Boolean {
         if (exposureMode != ExposureMode.AUTO) {
             return setAdaptiveCaptureMode(ExposureMode.PHONE_AUTO)
         }
         val luma = imageBrightness ?: return false
         val manualTarget = cameraSettings.manualNightTargetLuma()
+        val isoThreshold = cameraSettings.nightAdaptiveIsoThreshold()
         val nextMode = if (adaptiveCaptureMode == ExposureMode.PHONE_AUTO) {
-            if (luma <= manualTarget) {
+            if (luma <= manualTarget || (iso?.let { it >= isoThreshold } ?: false)) {
                 Log.i(
                     TAG,
-                    "Switching to night capture strategy: luma $luma <= target $manualTarget"
+                    "Switching to night capture strategy: luma $luma <= target $manualTarget or iso $iso >= threshold $isoThreshold"
                 )
                 ExposureMode.AUTO
             } else {

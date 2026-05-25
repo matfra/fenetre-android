@@ -185,8 +185,8 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("SSIM target", cameraSettings.ssimSetpoint().toString(), decimalInputType()) {
             it.toDoubleOrNull()?.let(cameraSettings::setSsimSetpoint)
         })
-        content.addView(settingEditText("SSIM area", cameraSettings.ssimArea()) {
-            cameraSettings.setSsimArea(it)
+        content.addView(settingEditText("Sky area", cameraSettings.skyArea()) {
+            cameraSettings.setSkyArea(it)
         })
         content.addView(settingEditText("SSIM min interval seconds", cameraSettings.ssimMinIntervalSeconds().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setSsimMinIntervalSeconds)
@@ -215,7 +215,7 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Star max blob pixels", cameraSettings.starDetectionMaxBlobPixels().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setStarDetectionMaxBlobPixels)
         })
-        content.addView(helpText("SSIM compares a post-processed 50x50 grayscale crop before overlays. Star detection counts small bright blobs in the selected SSIM area before that 50x50 resample and uses the star interval at night."))
+        content.addView(helpText("SSIM compares a post-processed 50x50 grayscale crop before overlays. Star detection counts small bright blobs in the selected sky area before that 50x50 resample and uses the star interval at night."))
         content.addView(sectionTitle("Daily timelapse"))
         content.addView(dailyTimelapseEncoderGroup())
         content.addView(settingEditText(
@@ -318,7 +318,10 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Manual to auto luma margin", cameraSettings.manualToAutoLumaMargin().toString(), decimalInputType()) {
             it.toDoubleOrNull()?.let(cameraSettings::setManualToAutoLumaMargin)
         })
-        content.addView(helpText("Phone auto switches to manual adaptive when luma falls to the target. Manual adaptive switches back only above target plus the manual-to-auto margin."))
+        content.addView(settingEditText("Night adaptive ISO threshold", cameraSettings.nightAdaptiveIsoThreshold().toString(), InputType.TYPE_CLASS_NUMBER) {
+            it.toIntOrNull()?.let(cameraSettings::setNightAdaptiveIsoThreshold)
+        })
+        content.addView(helpText("Phone auto switches to manual adaptive when luma falls to the target or phone auto ISO reaches the threshold. Manual adaptive switches back only above target plus the manual-to-auto margin."))
         content.addView(settingCheckBox("Vignette correction", cameraSettings.vignetteCorrectionEnabled()) {
             cameraSettings.setVignetteCorrectionEnabled(it)
         })
@@ -944,9 +947,10 @@ class MainActivity : ComponentActivity() {
         } else {
             ""
         }
+        val adaptiveIso = "; night ISO ${cameraSettings.nightAdaptiveIsoThreshold()}"
         val captureSize = cameraSettings.captureJpegSize().ifEmpty { "largest" }
         val outputSize = cameraSettings.outputResizeSize().ifEmpty { "native" }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; capture $captureSize; output $outputSize; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$lowBattery$storageManagement"
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; capture $captureSize; output $outputSize; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$adaptiveIso$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$lowBattery$storageManagement"
     }
 
     private fun requestNeededPermissions() {
