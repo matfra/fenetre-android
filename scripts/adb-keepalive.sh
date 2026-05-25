@@ -38,13 +38,13 @@ while true; do
     IFS="|" read -r name ip port <<< "$device"
     serial="${ip}:${port}"
     timestamp="$(date -Is)"
-    if "$ADB_BIN" -s "$serial" shell true >/dev/null 2>&1; then
+    if "$ADB_BIN" -s "$serial" shell dumpsys battery >/dev/null 2>&1; then
       echo "$timestamp $name $serial ok"
       continue
     fi
 
     "$ADB_BIN" connect "$serial" >/dev/null 2>&1 || true
-    if "$ADB_BIN" -s "$serial" shell true >/dev/null 2>&1; then
+    if "$ADB_BIN" -s "$serial" shell dumpsys battery >/dev/null 2>&1; then
       echo "$timestamp $name $serial reconnected"
     else
       echo "$timestamp $name $serial unavailable" >&2

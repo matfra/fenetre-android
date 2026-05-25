@@ -13,6 +13,7 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.ExecutorService
@@ -83,14 +84,20 @@ class FenetreAdminServer(
                 }
                 val method = parts[0].uppercase(Locale.US)
                 val path = parts[1].substringBefore("?").substringBefore("#")
+                var contentLength = 0
                 while (true) {
                     val line = input.readLine() ?: break
                     if (line.isEmpty()) {
                         break
                     }
+                    val name = line.substringBefore(":", "").trim().lowercase(Locale.US)
+                    val value = line.substringAfter(":", "").trim()
+                    if (name == "content-length") {
+                        contentLength = value.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                    }
                 }
 
-                if (method != "GET" && method != "HEAD") {
+                if (method != "GET" && method != "HEAD" && method != "POST") {
                     writeResponse(client, 405, "Method Not Allowed", "text/plain", "Method Not Allowed\n".toByteArray(), method == "HEAD")
                     return
                 }
@@ -98,6 +105,49 @@ class FenetreAdminServer(
                 when (path) {
                     "/" -> writeResponse(client, 200, "OK", "text/html; charset=utf-8", htmlStatus().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
                     "/status.json" -> writeResponse(client, 200, "OK", "application/json", statusJson().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
+                    "/settings.xml" -> {
+                        if (method != "GET" && method != "HEAD") {
+                            writeResponse(client, 405, "Method Not Allowed", "text/plain", "Method Not Allowed\n".toByteArray(), false)
+                            return
+                        }
+                        writeResponse(
+                            client,
+                            200,
+                            "OK",
+                            "application/xml; charset=utf-8",
+                            settings.exportXml().toByteArray(StandardCharsets.UTF_8),
+                            method == "HEAD",
+                            mapOf("Content-Disposition" to "attachment; filename=\"fenetre-camera-settings.xml\""),
+                        )
+                    }
+                    "/settings-import.html" -> {
+                        if (method == "POST") {
+                            val body = readBody(input, contentLength)
+                            val xml = formField(body, "settings_xml").ifBlank { body }
+                            try {
+                                val imported = settings.importXml(xml)
+                                writeResponse(
+                                    client,
+                                    200,
+                                    "OK",
+                                    "text/html; charset=utf-8",
+                                    settingsImportHtml("Imported $imported settings. Restart the capture service to apply camera-binding changes.").toByteArray(StandardCharsets.UTF_8),
+                                    false,
+                                )
+                            } catch (exception: Exception) {
+                                writeResponse(
+                                    client,
+                                    400,
+                                    "Bad Request",
+                                    "text/html; charset=utf-8",
+                                    settingsImportHtml("Import failed: ${exception.message ?: "invalid XML"}", isError = true).toByteArray(StandardCharsets.UTF_8),
+                                    false,
+                                )
+                            }
+                            return
+                        }
+                        writeResponse(client, 200, "OK", "text/html; charset=utf-8", settingsImportHtml().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
+                    }
                     "/metrics" -> writeResponse(client, 200, "OK", "text/plain; version=0.0.4; charset=utf-8", metricsText().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
                     else -> writeResponse(client, 404, "Not Found", "text/plain", "Not Found\n".toByteArray(), method == "HEAD")
                 }
@@ -109,6 +159,30 @@ class FenetreAdminServer(
                 }
             }
         }
+    }
+
+    private fun readBody(input: java.io.BufferedReader, contentLength: Int): String {
+        if (contentLength <= 0) {
+            return ""
+        }
+        val chars = CharArray(contentLength)
+        var offset = 0
+        while (offset < contentLength) {
+            val read = input.read(chars, offset, contentLength - offset)
+            if (read < 0) {
+                break
+            }
+            offset += read
+        }
+        return String(chars, 0, offset)
+    }
+
+    private fun formField(body: String, name: String): String {
+        return body.split('&')
+            .firstOrNull { it.substringBefore("=") == name }
+            ?.substringAfter("=", "")
+            ?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
+            ?: ""
     }
 
     private fun statusJson(): String {
@@ -551,7 +625,53 @@ class FenetreAdminServer(
                   <dt>Public UI</dt><dd><a href="${htmlEscape(settings.localWebUrl())}">${htmlEscape(settings.localWebUrl())}</a></dd>
                   <dt>Status JSON</dt><dd><a href="/status.json">/status.json</a></dd>
                   <dt>Metrics</dt><dd><a href="/metrics">/metrics</a></dd>
+                  <dt>Settings XML</dt><dd><a href="/settings.xml">export</a> / <a href="/settings-import.html">import</a></dd>
                 </dl>
+              </main>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
+    private fun settingsImportHtml(message: String? = null, isError: Boolean = false): String {
+        val messageHtml = message?.let {
+            """<p class="${if (isError) "error" else "ok"}">${htmlEscape(it)}</p>"""
+        }.orEmpty()
+        return """
+            <!doctype html>
+            <html lang="en">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>${htmlEscape(settings.deploymentName())} settings import</title>
+              <style>
+                :root { color-scheme: dark; font-family: Inter, Roboto, Arial, sans-serif; background: #080b10; color: #f8fafc; }
+                * { box-sizing: border-box; }
+                body { margin: 0; padding: 28px; background: #080b10; }
+                main { max-width: 860px; margin: 0 auto; }
+                h1 { margin: 0 0 12px; font-size: 26px; }
+                p { color: #94a3b8; line-height: 1.45; }
+                textarea { width: 100%; min-height: 420px; border: 1px solid #334155; border-radius: 6px; padding: 12px; background: #020617; color: #e2e8f0; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+                button, a.button { display: inline-block; margin-top: 12px; border: 0; border-radius: 6px; padding: 10px 14px; background: #2563eb; color: #fff; font-weight: 650; text-decoration: none; cursor: pointer; }
+                a { color: #93c5fd; }
+                .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+                .ok { color: #86efac; }
+                .error { color: #fca5a5; }
+              </style>
+            </head>
+            <body>
+              <main>
+                <h1>${htmlEscape(settings.deploymentName())} settings import</h1>
+                <p>Paste a SharedPreferences XML settings backup. Import replaces the current settings; restart the capture service after changing camera or server binding settings.</p>
+                $messageHtml
+                <form method="post" action="/settings-import.html">
+                  <textarea name="settings_xml" spellcheck="false" autocomplete="off">${htmlEscape(settings.exportXml())}</textarea>
+                  <div class="actions">
+                    <button type="submit">Import XML</button>
+                    <a class="button" href="/settings.xml">Export XML</a>
+                    <a href="/">Back to admin</a>
+                  </div>
+                </form>
               </main>
             </body>
             </html>
@@ -825,6 +945,7 @@ class FenetreAdminServer(
         contentType: String,
         body: ByteArray,
         headOnly: Boolean = false,
+        extraHeaders: Map<String, String> = emptyMap(),
     ) {
         val output = BufferedOutputStream(socket.getOutputStream())
         val header = "HTTP/1.1 $statusCode $statusText\r\n" +
@@ -832,6 +953,7 @@ class FenetreAdminServer(
             "Content-Length: ${body.size}\r\n" +
             "Connection: close\r\n" +
             "Access-Control-Allow-Origin: *\r\n" +
+            extraHeaders.entries.joinToString("") { (name, value) -> "$name: $value\r\n" } +
             "\r\n"
         output.write(header.toByteArray(StandardCharsets.US_ASCII))
         if (!headOnly) {

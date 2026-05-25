@@ -4,4 +4,4 @@ devices:
     port: 37241
   - name: s20
     ip: 192.168.8.187
-    port: 38177
+    port: 35763

@@ -2,6 +2,8 @@ package cam.fenetre.android
 
 import android.content.Context
 import android.os.Build
+import android.util.Xml
+import java.io.StringReader
 import kotlin.math.roundToLong
 
 enum class LensMode(val label: String) {
@@ -663,6 +665,42 @@ class FenetreCameraSettings(context: Context) {
 
     fun localWebUrl(): String = "http://${webHost()}:${webPort()}/"
 
+    fun exportXml(): String {
+        return buildString {
+            appendLine("""<?xml version="1.0" encoding="utf-8" standalone="yes" ?>""")
+            appendLine("<map>")
+            preferences.all.toSortedMap().forEach { (key, value) ->
+                if (key == KEY_SSIM_AREA) {
+                    appendLine("    <!-- Compatibility: stored under the old SSIM-area key, exposed as sky area. -->")
+                }
+                when (value) {
+                    is Boolean -> appendLine("""    <boolean name="${xmlEscape(key)}" value="$value" />""")
+                    is Float -> appendLine("""    <float name="${xmlEscape(key)}" value="$value" />""")
+                    is Int -> appendLine("""    <int name="${xmlEscape(key)}" value="$value" />""")
+                    is Long -> appendLine("""    <long name="${xmlEscape(key)}" value="$value" />""")
+                    is String -> appendLine("""    <string name="${xmlEscape(key)}">${xmlEscape(value)}</string>""")
+                }
+            }
+            appendLine("</map>")
+        }
+    }
+
+    fun importXml(xml: String): Int {
+        val parsed = parseSettingsXml(xml)
+        val editor = preferences.edit().clear()
+        parsed.forEach { (key, value) ->
+            when (value) {
+                is Boolean -> editor.putBoolean(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is String -> editor.putString(key, value)
+            }
+        }
+        editor.apply()
+        return parsed.size
+    }
+
     private fun cleanText(value: String?, fallback: String): String {
         return value?.trim()?.takeIf { it.isNotEmpty() } ?: fallback
     }
@@ -683,6 +721,58 @@ class FenetreCameraSettings(context: Context) {
             return cleaned
         }
         return if (cleaned.endsWith("/")) cleaned else "$cleaned/"
+    }
+
+    private fun parseSettingsXml(xml: String): Map<String, Any> {
+        val parser = Xml.newPullParser()
+        parser.setInput(StringReader(xml))
+        val values = linkedMapOf<String, Any>()
+        var sawMap = false
+        var event = parser.eventType
+        while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+            if (event == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                when (parser.name) {
+                    "map" -> sawMap = true
+                    "boolean" -> values[requiredName(parser)] = requiredValue(parser).toBooleanStrict()
+                    "float" -> values[requiredName(parser)] = requiredValue(parser).toFloat()
+                    "int" -> values[requiredName(parser)] = requiredValue(parser).toInt()
+                    "long" -> values[requiredName(parser)] = requiredValue(parser).toLong()
+                    "string" -> values[requiredName(parser)] = parser.nextText()
+                    else -> throw IllegalArgumentException("Unsupported settings XML tag: ${parser.name}")
+                }
+            }
+            event = parser.next()
+        }
+        if (!sawMap) {
+            throw IllegalArgumentException("Settings XML must contain a <map> root")
+        }
+        return values
+    }
+
+    private fun requiredName(parser: org.xmlpull.v1.XmlPullParser): String {
+        return parser.getAttributeValue(null, "name")
+            ?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("Settings XML entry is missing a name")
+    }
+
+    private fun requiredValue(parser: org.xmlpull.v1.XmlPullParser): String {
+        return parser.getAttributeValue(null, "value")
+            ?: throw IllegalArgumentException("Settings XML entry ${requiredName(parser)} is missing a value")
+    }
+
+    private fun xmlEscape(value: String): String {
+        return buildString {
+            value.forEach { char ->
+                when (char) {
+                    '&' -> append("&amp;")
+                    '<' -> append("&lt;")
+                    '>' -> append("&gt;")
+                    '"' -> append("&quot;")
+                    '\'' -> append("&apos;")
+                    else -> append(char)
+                }
+            }
+        }
     }
 
     companion object {

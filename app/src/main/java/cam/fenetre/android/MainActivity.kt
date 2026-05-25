@@ -33,6 +33,7 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import java.io.IOException
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -69,6 +70,26 @@ class MainActivity : ComponentActivity() {
             useDeviceLocation()
         } else {
             updateStatus("Location permission denied; coordinates unchanged")
+        }
+    }
+
+    private val exportSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/xml")
+    ) { uri ->
+        if (uri == null) {
+            updateStatus("Settings export cancelled")
+        } else {
+            exportSettingsXml(uri)
+        }
+    }
+
+    private val importSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) {
+            updateStatus("Settings import cancelled")
+        } else {
+            importSettingsXml(uri)
         }
     }
 
@@ -430,11 +451,23 @@ class MainActivity : ComponentActivity() {
             updateStatus("Capture service stopping")
         })
 
+        val fourthRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        fourthRow.addView(actionButton("Export settings") {
+            exportSettingsLauncher.launch(defaultSettingsExportFilename())
+        })
+        fourthRow.addView(actionButton("Import settings") {
+            importSettingsLauncher.launch(arrayOf("application/xml", "text/xml", "text/*", "*/*"))
+        })
+
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(firstRow)
             addView(secondRow)
             addView(thirdRow)
+            addView(fourthRow)
         }
     }
 
@@ -1050,6 +1083,38 @@ class MainActivity : ComponentActivity() {
         latitudeInput.setText(latitudeText)
         longitudeInput.setText(longitudeText)
         updateStatus("Location $detail: $latitudeText, $longitudeText")
+    }
+
+    private fun exportSettingsXml(uri: Uri) {
+        try {
+            contentResolver.openOutputStream(uri)?.use { output ->
+                output.write(cameraSettings.exportXml().toByteArray(Charsets.UTF_8))
+            } ?: throw IOException("Unable to open export destination")
+            updateStatus("Settings exported to XML")
+        } catch (exception: Exception) {
+            updateStatus("Settings export failed: ${exception.message ?: "unknown error"}")
+        }
+    }
+
+    private fun importSettingsXml(uri: Uri) {
+        try {
+            val xml = contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                ?: throw IOException("Unable to open import file")
+            val imported = cameraSettings.importXml(xml)
+            setContentView(buildContentView())
+            updateStatePanel()
+            updateStatus("Imported $imported settings from XML; use Apply & restart for camera or server changes")
+        } catch (exception: Exception) {
+            updateStatus("Settings import failed: ${exception.message ?: "unknown error"}")
+        }
+    }
+
+    private fun defaultSettingsExportFilename(): String {
+        val deployment = cameraSettings.deploymentName()
+            .replace(Regex("""[^A-Za-z0-9._-]"""), "-")
+            .trim('-')
+            .ifEmpty { "fenetre-camera" }
+        return "$deployment-settings.xml"
     }
 
     private fun sendServiceAction(action: String) {

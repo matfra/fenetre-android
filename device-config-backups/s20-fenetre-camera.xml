@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<map>
+    <string name="deployment_name">s20.fenetre.cam</string>
+    <string name="public_base_url">https://s20.fenetre.cam/</string>
+    <string name="web_host">192.168.8.187</string>
+    <string name="night_capture_strategy">MANUAL_ADAPTIVE</string>
+    <string name="lens_mode">ULTRA_WIDE</string>
+    <float name="night_exposure_boost_stops" value="1.0" />
+    <float name="manual_night_target_luma" value="0.2" />
+    <int name="night_adaptive_iso_threshold" value="400" />
+    <float name="manual_to_auto_luma_margin" value="0.05" />
+    <string name="output_resize_size">1920x1440</string>
+</map>

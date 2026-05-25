@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <float name="night_exposure_boost_stops" value="1.0" />
+    <boolean name="sunrise_sunset_fast_enabled" value="true" />
+    <string name="night_capture_strategy">MANUAL_ADAPTIVE</string>
+    <float name="vignette_correction_radius" value="0.95" />
+    <int name="rotation_degrees" value="0" />
+    <boolean name="start_on_boot_enabled" value="true" />
+    <int name="sunrise_offset_end_minutes" value="30" />
+    <float name="vignette_correction_strength" value="0.2" />
+    <string name="lens_mode">TELE</string>
+    <boolean name="timestamp_overlay_enabled" value="true" />
+    <boolean name="storage_management_dry_run" value="false" />
+    <int name="sunrise_sunset_fast_interval_seconds" value="10" />
+    <float name="daily_vp9_bitrate_megabits" value="7.0" />
+    <int name="sunrise_offset_start_minutes" value="60" />
+    <float name="manual_night_target_luma" value="0.17" />
+    <int name="sunset_offset_end_minutes" value="60" />
+    <!-- Compatibility: stored under the old SSIM-area key, exposed as sky area. -->
+    <string name="ssim_area">0,0,1,0.333333</string>
+    <float name="vignette_correction_power" value="1.2" />
+    <int name="storage_management_max_size_gb" value="83" />
+    <int name="sunset_offset_start_minutes" value="30" />
+    <int name="cooldown_thermal_status_threshold" value="3" />
+    <string name="daily_timelapse_encoder_mode">VP9_HIGH_QUALITY</string>
+    <boolean name="storage_management_enabled" value="true" />
+    <string name="capture_jpeg_size"></string>
+    <string name="output_resize_size">2000x1500</string>
+</map>
