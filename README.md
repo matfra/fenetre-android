@@ -44,7 +44,7 @@ To leave it running in the background:
 nohup scripts/adb-keepalive.sh > adb-keepalive.log 2>&1 &
 ```
 
-Set `ADB_KEEPALIVE_INTERVAL_SECONDS` to change the default 60-second interval.
+Set `ADB_KEEPALIVE_INTERVAL_SECONDS` to change the default 280-second interval.
 
 To run it automatically under user systemd:
 
@@ -150,35 +150,36 @@ Stop the emulator with:
 
 ## Exposure Control
 
-The default exposure mode is `Adaptive low ISO`, but the app does not force
-manual sensor controls all day. It starts in `Phone auto`, then uses the last
-frame's EXIF to compute an exposure composite:
+The default exposure mode is `Adaptive low ISO`. In this mode, the app starts in
+`Phone auto` during the day. Android controls exposure and keeps the phone's
+normal image-processing pipeline, including lens correction and other
+manufacturer tuning.
 
-```text
-exposure composite = ISO * exposure_time_seconds
-```
+After each phone-auto frame, the app measures image luma and reads the EXIF ISO.
+It switches to the configured night strategy only when both conditions are true:
 
-When phone auto rises above the configured ISO cap, default `100`, and the
-composite exceeds the night threshold, default `2.0`, the app switches to the
-configured night strategy. When the composite falls below the day threshold,
-default `1.0`, it switches back to phone auto. This keeps daytime captures on
-the phone's normal processing pipeline while still allowing long low-ISO night
-captures.
+- EXIF ISO is at or above `night_adaptive_iso_threshold`, defaulting to `400`.
+- Image luma is no brighter than `manual_night_target_luma + 0.03`.
 
-The manual adaptive night strategy:
+The usual night strategy is `Manual adaptive`. Requiring both ISO and luma keeps
+the app in phone auto during twilight while the phone is still producing a much
+brighter image than the configured night target.
 
-- keeps ISO at or below the configured ISO cap while exposure time can still
-  increase;
-- targets a configurable dark night-frame brightness, defaulting to `12%`,
-  avoiding the daytime-like luma target that overexposes bright foregrounds and
-  city-lit skies;
-- can apply a configurable radial vignette-correction post-process before
-  overlays and metadata are written; on the Pixel 6 Pro this defaults to
-  darkening the center instead of brightening the corners, preserving ETTR in
-  the vignetted sky and avoiding extra corner noise;
-- clamps exposure time at the configured per-lens max, defaulting to `25s` for
-  ultra-wide, `15s` for wide, and `5s` for tele;
-- once the exposure max is reached, allows ISO to rise above the cap.
+In manual adaptive mode, the app tries to keep ISO at `100` and adjusts shutter
+time to reach the configured night brightness target. If the requested shutter
+time reaches the configured per-lens maximum, the app then allows ISO to rise.
+
+At the end of the night, the app does not use luma to decide when to return to
+phone auto, because manual adaptive is actively controlling luma. Instead, it
+returns to phone auto when the requested shutter time becomes shorter than
+`manual_to_auto_max_exposure_seconds`, defaulting to `0.033333` seconds
+(`1/30s`). A very short requested exposure means there is enough ambient light
+that the phone's normal auto mode should take over again.
+
+Manual adaptive also supports a configurable radial vignette-correction
+post-process before overlays and metadata are written. On the Pixel 6 Pro this
+defaults to darkening the center instead of brightening the corners, preserving
+ETTR in the vignetted sky and avoiding extra corner noise.
 
 Night exposure boost is independent from the day/night mode switch. It defaults
 to `0` and only applies inside the configured twilight-buffer night window when

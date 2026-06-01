@@ -14,7 +14,10 @@
     <int name="sunrise_sunset_fast_interval_seconds" value="10" />
     <float name="daily_vp9_bitrate_megabits" value="7.0" />
     <int name="sunrise_offset_start_minutes" value="60" />
-    <float name="manual_night_target_luma" value="0.17" />
+    <float name="manual_night_target_luma" value="0.16" />
+    <float name="manual_to_auto_max_exposure_seconds" value="0.033333" />
+    <!-- Compatibility: old luma-based day-return key; current app uses shutter time. -->
+    <float name="manual_to_auto_luma_margin" value="0.01" />
     <int name="sunset_offset_end_minutes" value="60" />
     <!-- Compatibility: stored under the old SSIM-area key, exposed as sky area. -->
     <string name="ssim_area">0,0,1,0.333333</string>

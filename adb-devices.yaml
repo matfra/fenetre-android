@@ -1,7 +1,7 @@
 devices:
   - name: p6p
     ip: 192.168.8.242
-    port: 37241
+    port: 42661
   - name: s20
     ip: 192.168.8.187
     port: 35763

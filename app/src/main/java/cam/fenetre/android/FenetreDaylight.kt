@@ -167,17 +167,24 @@ class FenetreDaylight(private val storage: FenetreStorage) {
         val monthFiles = daylightDir.listFiles { file ->
             file.isFile && file.extension.lowercase(Locale.US) == "png"
         }?.sortedByDescending { it.name }.orEmpty()
+        monthFiles.forEach { writeMonthPage(it) }
         File(storage.cameraDir(), "daylight.html").writeText(
             buildString {
                 appendLine("<!doctype html>")
-                appendLine("<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+                appendLine("<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
                 appendLine("<title>Fenetre daylight</title>")
                 appendLine("<style>")
-                appendLine("body{margin:0;background:#05070a;color:#f5f7fb;font-family:Arial,sans-serif;display:flex;gap:12px;padding:12px}")
-                appendLine(".labels{width:52px;position:sticky;left:0;background:#05070a}.label{height:60px;font-size:12px;color:#9ca3af}")
-                appendLine(".month{display:flex;align-items:flex-start;gap:8px;margin-right:18px}.month img{height:1440px;image-rendering:auto}.name{writing-mode:vertical-rl;color:#d1d5db}")
-                appendLine(".bands{display:flex;align-items:flex-start}")
-                appendLine("a{color:inherit}")
+                appendLine(":root{color-scheme:dark;font-family:Inter,Roboto,Arial,sans-serif;background:#05070a;color:#f5f7fb}")
+                appendLine("*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070a}")
+                appendLine("body{display:flex;gap:8px;padding:8px}")
+                appendLine(".labels{flex:0 0 48px;display:grid;grid-template-rows:repeat(24,1fr);height:calc(100dvh - 16px);position:sticky;left:0;background:#05070a;z-index:2}")
+                appendLine(".label{font-size:11px;color:#9ca3af;line-height:1;display:flex;align-items:flex-start;padding-top:1px}")
+                appendLine(".bands{display:flex;align-items:stretch;gap:10px;min-width:0;max-width:calc(100vw - 64px);height:calc(100dvh - 16px);overflow-x:auto;overflow-y:hidden}")
+                appendLine(".month{flex:0 0 auto;display:flex;align-items:stretch;gap:4px;height:100%}")
+                appendLine(".month a{display:block;height:100%;border-radius:4px;overflow:hidden}")
+                appendLine(".month img{display:block;height:100%;width:auto;image-rendering:auto}")
+                appendLine(".name{writing-mode:vertical-rl;text-orientation:mixed;color:#d1d5db;font-size:12px;line-height:1.1;padding-top:2px}")
+                appendLine("a{color:inherit;text-decoration:none}")
                 appendLine("</style></head><body>")
                 appendLine("<div class=\"labels\">")
                 for (hour in 0 until 24) {
@@ -192,11 +199,76 @@ class FenetreDaylight(private val storage: FenetreStorage) {
                 appendLine("</div><div class=\"bands\">")
                 monthFiles.forEach { file ->
                     val month = file.nameWithoutExtension
-                    appendLine("<div class=\"month\"><a href=\"daylight/$month.png\"><img src=\"daylight/${file.name}\" alt=\"$month\"></a><div class=\"name\">$month</div></div>")
+                    appendLine("<div class=\"month\"><a href=\"daylight/$month.html\"><img src=\"daylight/${file.name}\" alt=\"$month\"></a><div class=\"name\">${monthLabel(month)}</div></div>")
                 }
                 appendLine("</div></body></html>")
             }
         )
+    }
+
+    private fun writeMonthPage(monthFile: File) {
+        val month = monthFile.nameWithoutExtension
+        val parsed = runCatching { YearMonth.parse(month) }.getOrNull() ?: return
+        val days = (1..parsed.lengthOfMonth()).map { day ->
+            val dayName = "%s-%02d".format(Locale.US, month, day)
+            DayLink(dayName, File(storage.cameraDir(), dayName).isDirectory)
+        }
+        File(monthFile.parentFile, "$month.html").writeText(
+            buildString {
+                appendLine("<!doctype html>")
+                appendLine("<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+                appendLine("<title>Fenetre daylight $month</title>")
+                appendLine("<style>")
+                appendLine(":root{color-scheme:dark;font-family:Inter,Roboto,Arial,sans-serif;background:#05070a;color:#f5f7fb}")
+                appendLine("*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#05070a}")
+                appendLine("body{display:grid;grid-template-columns:auto minmax(180px,1fr);gap:14px;padding:10px;min-height:100dvh}")
+                appendLine(".band{display:flex;gap:8px;height:calc(100dvh - 20px);min-height:420px}")
+                appendLine(".labels{flex:0 0 48px;display:grid;grid-template-rows:repeat(24,1fr);height:100%}")
+                appendLine(".label{font-size:11px;color:#9ca3af;line-height:1;display:flex;align-items:flex-start;padding-top:1px}")
+                appendLine("img{display:block;height:100%;width:auto;border-radius:4px;image-rendering:auto}")
+                appendLine("main{min-width:0;display:flex;flex-direction:column;max-height:calc(100dvh - 20px)}")
+                appendLine("header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}")
+                appendLine("h1{margin:0;font-size:20px;font-weight:650}a{color:#dbeafe;text-decoration:none}.back{color:#93c5fd}")
+                appendLine(".days{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;overflow:auto;padding-bottom:2px}")
+                appendLine(".day{display:block;border:1px solid #334155;border-radius:6px;padding:10px 9px;background:#111827;color:#f8fafc;text-align:center}")
+                appendLine(".missing{opacity:.38}")
+                appendLine("@media(max-width:720px){body{grid-template-columns:1fr;grid-template-rows:auto 1fr;overflow:auto}.band{height:62dvh;min-height:360px}.days{overflow:visible}main{max-height:none}}")
+                appendLine("</style></head><body>")
+                appendLine("<section class=\"band\" aria-label=\"Daylight band for $month\">")
+                appendLine("<div class=\"labels\">")
+                for (hour in 0 until 24) {
+                    appendLine("<div class=\"label\">${hourLabel(hour)}</div>")
+                }
+                appendLine("</div><img src=\"${monthFile.name}\" alt=\"$month daylight band\"></section>")
+                appendLine("<main><header><h1>${monthLabel(month).replace("<br>", " ")}</h1><a class=\"back\" href=\"../daylight.html\">All months</a></header>")
+                appendLine("<nav class=\"days\" aria-label=\"Days in $month\">")
+                days.forEach { day ->
+                    val classes = if (day.exists) "day" else "day missing"
+                    appendLine("<a class=\"$classes\" href=\"../${day.name}/\">${day.name}</a>")
+                }
+                appendLine("</nav></main></body></html>")
+            }
+        )
+    }
+
+    private fun hourLabel(hour: Int): String {
+        return when {
+            hour == 0 -> "12 AM"
+            hour < 12 -> "$hour AM"
+            hour == 12 -> "12 PM"
+            else -> "${hour - 12} PM"
+        }
+    }
+
+    private fun monthLabel(month: String): String {
+        val parts = month.split("-")
+        if (parts.size != 2) {
+            return month
+        }
+        val monthNumber = parts[1].toIntOrNull() ?: return month
+        val names = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+        val name = names.getOrNull(monthNumber - 1) ?: return month
+        return "$name<br>${parts[0]}"
     }
 
     private fun averageSkyColor(imageFile: File): Int? {
@@ -253,6 +325,11 @@ class FenetreDaylight(private val storage: FenetreStorage) {
 private data class DayMinute(
     val day: String,
     val minute: Int,
+)
+
+private data class DayLink(
+    val name: String,
+    val exists: Boolean,
 )
 
 private class ColorStats {

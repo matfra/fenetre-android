@@ -241,7 +241,7 @@ class FenetreAdminServer(
                 "night_exposure_boost_twilight_buffer_minutes": ${settings.nightExposureBoostTwilightBufferMinutes()},
                 "night_exposure_boost_active": $manualNightBoostActive,
                 "manual_night_target_luma": ${settings.manualNightTargetLuma()},
-                "manual_to_auto_luma_margin": ${settings.manualToAutoLumaMargin()},
+                "manual_to_auto_max_exposure_seconds": ${settings.manualToAutoMaxExposureSeconds()},
                 "night_adaptive_iso_threshold": ${settings.nightAdaptiveIsoThreshold()},
                 "vignette_correction_enabled": ${settings.vignetteCorrectionEnabled()},
                 "vignette_correction_strength": ${settings.vignetteCorrectionStrength()},
@@ -494,9 +494,9 @@ class FenetreAdminServer(
             appendLine("# HELP fenetre_manual_night_target_luma Configured average luma target for manual adaptive night exposure.")
             appendLine("# TYPE fenetre_manual_night_target_luma gauge")
             appendLine("fenetre_manual_night_target_luma{$cameraLabels} ${settings.manualNightTargetLuma()}")
-            appendLine("# HELP fenetre_manual_to_auto_luma_margin Luma hysteresis margin for switching from manual adaptive back to phone auto.")
-            appendLine("# TYPE fenetre_manual_to_auto_luma_margin gauge")
-            appendLine("fenetre_manual_to_auto_luma_margin{$cameraLabels} ${settings.manualToAutoLumaMargin()}")
+            appendLine("# HELP fenetre_manual_to_auto_max_exposure_seconds Requested shutter-time threshold for switching from manual adaptive back to phone auto.")
+            appendLine("# TYPE fenetre_manual_to_auto_max_exposure_seconds gauge")
+            appendLine("fenetre_manual_to_auto_max_exposure_seconds{$cameraLabels} ${settings.manualToAutoMaxExposureSeconds()}")
             appendLine("# HELP fenetre_night_adaptive_iso_threshold Phone-auto ISO threshold for switching into manual adaptive night capture.")
             appendLine("# TYPE fenetre_night_adaptive_iso_threshold gauge")
             appendLine("fenetre_night_adaptive_iso_threshold{$cameraLabels} ${settings.nightAdaptiveIsoThreshold()}")

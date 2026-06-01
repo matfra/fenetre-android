@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="${1:-"$ROOT_DIR/adb-devices.yaml"}"
-INTERVAL_SECONDS="${ADB_KEEPALIVE_INTERVAL_SECONDS:-60}"
+INTERVAL_SECONDS="${ADB_KEEPALIVE_INTERVAL_SECONDS:-280}"
 ADB_BIN="${ADB:-adb}"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then

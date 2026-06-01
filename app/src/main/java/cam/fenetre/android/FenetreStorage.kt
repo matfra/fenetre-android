@@ -115,7 +115,7 @@ class FenetreStorage(context: Context, private val settings: FenetreCameraSettin
               "requested_iso": ${manualExposureSettings?.iso?.toString() ?: "null"},
               "exposure_composite": ${exposureComposite?.toString() ?: "null"},
               "manual_night_target_luma": ${settings.manualNightTargetLuma()},
-              "manual_to_auto_luma_margin": ${settings.manualToAutoLumaMargin()},
+              "manual_to_auto_max_exposure_seconds": ${settings.manualToAutoMaxExposureSeconds()},
               "night_adaptive_iso_threshold": ${settings.nightAdaptiveIsoThreshold()},
               "vignette_correction_enabled": ${settings.vignetteCorrectionEnabled()},
               "vignette_correction_applied": $vignetteCorrectionApplied,

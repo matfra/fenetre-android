@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/home/mathieu/fenetre-playground/fenetre-android
 Environment=ADB=/home/mathieu/Android/Sdk/platform-tools/adb
-Environment=ADB_KEEPALIVE_INTERVAL_SECONDS=60
+Environment=ADB_KEEPALIVE_INTERVAL_SECONDS=280
 ExecStart=/home/mathieu/fenetre-playground/fenetre-android/scripts/adb-keepalive.sh /home/mathieu/fenetre-playground/fenetre-android/adb-devices.yaml
 Restart=always
 RestartSec=10

@@ -67,6 +67,7 @@ class FenetreCaptureService : LifecycleService() {
     private var captureInProgress = false
     private var captureGeneration = 0
     private var captureTimeoutRunnable: Runnable? = null
+    private var consecutiveCaptureTimeouts = 0
     private var cooldownRunnable: Runnable? = null
     private var previousSsimSample: SsimSample? = null
     private var dynamicSsimIntervalSeconds = 0
@@ -117,11 +118,11 @@ class FenetreCaptureService : LifecycleService() {
         running = false
         serviceRunning = false
         mainHandler.removeCallbacksAndMessages(null)
-        cameraExecutor.shutdown()
         timelapse.stop()
         daylight.stop()
         storageManager.stop()
         super.onDestroy()
+        cameraExecutor.shutdown()
         webServer?.stop()
         adminServer?.stop()
     }
@@ -466,15 +467,7 @@ class FenetreCaptureService : LifecycleService() {
             if (!running || !captureInProgress || captureGeneration != generation) {
                 return@Runnable
             }
-            Log.w(TAG, "Capture timed out after ${timeoutMs}ms: ${photoFile.name}")
-            captureInProgress = false
-            serviceCaptureInProgress = false
-            imageCapture = null
-            if (photoFile.exists()) {
-                photoFile.delete()
-            }
-            updateNotification("Capture timed out; rebinding camera")
-            bindCamera()
+            handleCaptureTimeout(photoFile, timeoutMs)
         }
         captureTimeoutRunnable = timeoutRunnable
         mainHandler.postDelayed(timeoutRunnable, timeoutMs)
@@ -496,6 +489,39 @@ class FenetreCaptureService : LifecycleService() {
         captureTimeoutRunnable = null
     }
 
+    private fun handleCaptureTimeout(photoFile: File, timeoutMs: Long) {
+        consecutiveCaptureTimeouts += 1
+        Log.w(
+            TAG,
+            "Capture timed out after ${timeoutMs}ms: ${photoFile.name}; " +
+                "consecutiveTimeouts=$consecutiveCaptureTimeouts"
+        )
+        captureInProgress = false
+        serviceCaptureInProgress = false
+        imageCapture = null
+        captureFailuresTotal += 1
+        if (photoFile.exists()) {
+            photoFile.delete()
+        }
+        if (consecutiveCaptureTimeouts >= CAPTURE_TIMEOUT_SERVICE_RESTART_THRESHOLD) {
+            updateNotification("Capture timed out $consecutiveCaptureTimeouts times; restarting service")
+            restartServiceAfterTimeout()
+        } else {
+            updateNotification("Capture timed out; rebinding camera")
+            bindCamera()
+        }
+    }
+
+    private fun restartServiceAfterTimeout() {
+        Handler(Looper.getMainLooper()).postDelayed({
+            ContextCompat.startForegroundService(
+                applicationContext,
+                Intent(applicationContext, FenetreCaptureService::class.java).setAction(ACTION_START),
+            )
+        }, SERVICE_RESTART_AFTER_TIMEOUT_MS)
+        stopCapture()
+    }
+
     private fun captureTimeoutMs(): Long {
         val exposureMs = if (exposureMode == ExposureMode.AUTO) {
             manualExposureSettings?.frameDurationNs?.let { it / 1_000_000L } ?: 0L
@@ -506,6 +532,7 @@ class FenetreCaptureService : LifecycleService() {
     }
 
     private fun onCaptureSaved(photoFile: File) {
+        consecutiveCaptureTimeouts = 0
         val processingStartedElapsedMs = captureStartedElapsedMs
         val captureExif = CaptureExif.fromFile(photoFile)
         val exposureComposite = captureExif.exposureComposite()
@@ -718,24 +745,28 @@ class FenetreCaptureService : LifecycleService() {
         if (exposureMode != ExposureMode.AUTO) {
             return setAdaptiveCaptureMode(ExposureMode.PHONE_AUTO)
         }
-        val luma = imageBrightness ?: return false
         val manualTarget = cameraSettings.manualNightTargetLuma()
         val isoThreshold = cameraSettings.nightAdaptiveIsoThreshold()
         val nextMode = if (adaptiveCaptureMode == ExposureMode.PHONE_AUTO) {
-            if (luma <= manualTarget || (iso?.let { it >= isoThreshold } ?: false)) {
+            val luma = imageBrightness ?: return false
+            val withinNightTargetLuma = luma <= manualTarget + AUTO_TO_MANUAL_LUMA_MARGIN
+            val isoAtNightThreshold = iso?.let { it >= isoThreshold } ?: false
+            if (withinNightTargetLuma && isoAtNightThreshold) {
                 Log.i(
                     TAG,
-                    "Switching to night capture strategy: luma $luma <= target $manualTarget or iso $iso >= threshold $isoThreshold"
+                    "Switching to night capture strategy: luma $luma <= target $manualTarget + " +
+                        "margin $AUTO_TO_MANUAL_LUMA_MARGIN and iso $iso >= threshold $isoThreshold"
                 )
                 ExposureMode.AUTO
             } else {
                 ExposureMode.PHONE_AUTO
             }
-        } else if (luma >= manualTarget + cameraSettings.manualToAutoLumaMargin()) {
+        } else if ((manualExposureSettings?.exposureTimeSeconds() ?: Double.MAX_VALUE) <= cameraSettings.manualToAutoMaxExposureSeconds()) {
             Log.i(
                 TAG,
-                "Switching to phone auto exposure: luma $luma >= target $manualTarget + " +
-                    "margin ${cameraSettings.manualToAutoLumaMargin()}"
+                "Switching to phone auto exposure: requested exposure " +
+                    "${manualExposureSettings?.exposureTimeSeconds()}s <= " +
+                    "${cameraSettings.manualToAutoMaxExposureSeconds()}s"
             )
             ExposureMode.PHONE_AUTO
         } else {
@@ -1098,9 +1129,12 @@ class FenetreCaptureService : LifecycleService() {
         private const val MAX_MANUAL_ISO = 6400
         private const val MIN_CAPTURE_TIMEOUT_MS = 60_000L
         private const val CAPTURE_TIMEOUT_PADDING_MS = 15_000L
+        private const val CAPTURE_TIMEOUT_SERVICE_RESTART_THRESHOLD = 2
+        private const val SERVICE_RESTART_AFTER_TIMEOUT_MS = 3_000L
         private const val COOLDOWN_CHECK_INTERVAL_MS = 60_000L
         private const val INFINITY_FOCUS_DIOPTERS = 0.0f
         private const val EXPOSURE_DEADBAND = 0.08
+        private const val AUTO_TO_MANUAL_LUMA_MARGIN = 0.03
         private const val FOUR_THREE_ASPECT_RATIO = 4.0 / 3.0
         private const val ASPECT_RATIO_TOLERANCE = 0.02
         private const val MIN_DARKEN_EXPOSURE_ADJUSTMENT_FACTOR = 0.25

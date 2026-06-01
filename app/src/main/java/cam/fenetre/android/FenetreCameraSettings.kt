@@ -406,6 +406,17 @@ class FenetreCameraSettings(context: Context) {
             .apply()
     }
 
+    fun manualToAutoMaxExposureSeconds(): Double = preferences.getFloat(
+        KEY_MANUAL_TO_AUTO_MAX_EXPOSURE_SECONDS,
+        DEFAULT_MANUAL_TO_AUTO_MAX_EXPOSURE_SECONDS.toFloat(),
+    ).toDouble().coerceIn(0.0001, 10.0)
+
+    fun setManualToAutoMaxExposureSeconds(value: Double) {
+        preferences.edit()
+            .putFloat(KEY_MANUAL_TO_AUTO_MAX_EXPOSURE_SECONDS, value.coerceIn(0.0001, 10.0).toFloat())
+            .apply()
+    }
+
     fun manualToAutoLumaMargin(): Double = preferences.getFloat(
         KEY_MANUAL_TO_AUTO_LUMA_MARGIN,
         DEFAULT_MANUAL_TO_AUTO_LUMA_MARGIN.toFloat(),
@@ -816,6 +827,7 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES = "night_exposure_boost_twilight_buffer_minutes"
         private const val KEY_NIGHT_CAPTURE_STRATEGY = "night_capture_strategy"
         private const val KEY_MANUAL_NIGHT_TARGET_LUMA = "manual_night_target_luma"
+        private const val KEY_MANUAL_TO_AUTO_MAX_EXPOSURE_SECONDS = "manual_to_auto_max_exposure_seconds"
         private const val KEY_MANUAL_TO_AUTO_LUMA_MARGIN = "manual_to_auto_luma_margin"
         private const val KEY_NIGHT_ADAPTIVE_ISO_THRESHOLD = "night_adaptive_iso_threshold"
         private const val KEY_VIGNETTE_CORRECTION_ENABLED = "vignette_correction_enabled"
@@ -880,6 +892,7 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_NIGHT_EXPOSURE_BOOST_TWILIGHT_BUFFER_MINUTES = 90
         private val DEFAULT_NIGHT_CAPTURE_STRATEGY = NightCaptureStrategy.MANUAL_ADAPTIVE
         private const val DEFAULT_MANUAL_NIGHT_TARGET_LUMA = 0.15
+        private const val DEFAULT_MANUAL_TO_AUTO_MAX_EXPOSURE_SECONDS = 0.033333
         private const val DEFAULT_MANUAL_TO_AUTO_LUMA_MARGIN = 0.05
         private const val DEFAULT_NIGHT_ADAPTIVE_ISO_THRESHOLD = 400
         private const val DEFAULT_VIGNETTE_CORRECTION_STRENGTH = 0.2

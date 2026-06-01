@@ -8,6 +8,8 @@
     <float name="night_exposure_boost_stops" value="1.0" />
     <float name="manual_night_target_luma" value="0.2" />
     <int name="night_adaptive_iso_threshold" value="400" />
+    <float name="manual_to_auto_max_exposure_seconds" value="0.033333" />
+    <!-- Compatibility: old luma-based day-return key; current app uses shutter time. -->
     <float name="manual_to_auto_luma_margin" value="0.05" />
     <string name="output_resize_size">1920x1440</string>
 </map>

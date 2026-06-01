@@ -336,13 +336,13 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Manual night target brightness", cameraSettings.manualNightTargetLuma().toString(), decimalInputType()) {
             it.toDoubleOrNull()?.let(cameraSettings::setManualNightTargetLuma)
         })
-        content.addView(settingEditText("Manual to auto luma margin", cameraSettings.manualToAutoLumaMargin().toString(), decimalInputType()) {
-            it.toDoubleOrNull()?.let(cameraSettings::setManualToAutoLumaMargin)
+        content.addView(settingEditText("Manual to auto max exposure seconds", cameraSettings.manualToAutoMaxExposureSeconds().toString(), decimalInputType()) {
+            it.toDoubleOrNull()?.let(cameraSettings::setManualToAutoMaxExposureSeconds)
         })
         content.addView(settingEditText("Night adaptive ISO threshold", cameraSettings.nightAdaptiveIsoThreshold().toString(), InputType.TYPE_CLASS_NUMBER) {
             it.toIntOrNull()?.let(cameraSettings::setNightAdaptiveIsoThreshold)
         })
-        content.addView(helpText("Phone auto switches to manual adaptive when luma falls to the target or phone auto ISO reaches the threshold. Manual adaptive switches back only above target plus the manual-to-auto margin."))
+        content.addView(helpText("Phone auto switches to manual adaptive when ISO reaches the threshold and luma is within 0.03 of the night target. Manual adaptive switches back to phone auto when the requested shutter time is shorter than the max exposure threshold."))
         content.addView(settingCheckBox("Vignette correction", cameraSettings.vignetteCorrectionEnabled()) {
             cameraSettings.setVignetteCorrectionEnabled(it)
         })
