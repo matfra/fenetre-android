@@ -1,6 +1,7 @@
 package cam.fenetre.android
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
@@ -9,6 +10,7 @@ import android.os.Build
 import android.os.Debug
 import android.os.SystemClock
 import android.util.Log
+import androidx.core.content.ContextCompat
 import java.io.BufferedOutputStream
 import java.io.File
 import java.net.ServerSocket
@@ -104,6 +106,21 @@ class FenetreAdminServer(
 
                 when (path) {
                     "/" -> writeResponse(client, 200, "OK", "text/html; charset=utf-8", htmlStatus().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
+                    "/action" -> {
+                        if (method != "POST") {
+                            writeResponse(client, 405, "Method Not Allowed", "text/plain", "Method Not Allowed\n".toByteArray(), method == "HEAD")
+                            return
+                        }
+                        val action = formField(readBody(input, contentLength), "action")
+                        val message = adminActionMessage(action)
+                        if (message == null) {
+                            writeResponse(client, 400, "Bad Request", "text/plain", "Unknown admin action\n".toByteArray(), false)
+                            return
+                        }
+                        writeResponse(client, 200, "OK", "text/html; charset=utf-8", htmlStatus(message).toByteArray(StandardCharsets.UTF_8), false)
+                        dispatchAdminAction(action)
+                        return
+                    }
                     "/status.json" -> writeResponse(client, 200, "OK", "application/json", statusJson().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
                     "/settings.xml" -> {
                         if (method != "GET" && method != "HEAD") {
@@ -183,6 +200,34 @@ class FenetreAdminServer(
             ?.substringAfter("=", "")
             ?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
             ?: ""
+    }
+
+    private fun adminActionMessage(action: String): String? {
+        return when (action) {
+            ADMIN_ACTION_CAPTURE_NOW -> "Capture requested."
+            ADMIN_ACTION_RESTART_CAMERA -> "Camera rebind requested."
+            ADMIN_ACTION_STOP_CAPTURE -> "Capture service stop requested. The admin port will go away when the service stops."
+            ADMIN_ACTION_START_CAPTURE -> "Capture service start requested."
+            ADMIN_ACTION_BUILD_DAILY_TIMELAPSE -> "Daily timelapse build requested."
+            ADMIN_ACTION_BUILD_DAYLIGHT -> "Daylight browser rebuild requested."
+            ADMIN_ACTION_RUN_STORAGE_MANAGEMENT -> "Storage management run requested."
+            else -> null
+        }
+    }
+
+    private fun dispatchAdminAction(action: String) {
+        val serviceAction = when (action) {
+            ADMIN_ACTION_CAPTURE_NOW -> FenetreCaptureService.ACTION_CAPTURE_NOW
+            ADMIN_ACTION_RESTART_CAMERA -> FenetreCaptureService.ACTION_RESTART_CAMERA
+            ADMIN_ACTION_STOP_CAPTURE -> FenetreCaptureService.ACTION_STOP
+            ADMIN_ACTION_START_CAPTURE -> FenetreCaptureService.ACTION_START
+            ADMIN_ACTION_BUILD_DAILY_TIMELAPSE -> FenetreCaptureService.ACTION_BUILD_DAILY_TIMELAPSE
+            ADMIN_ACTION_BUILD_DAYLIGHT -> FenetreCaptureService.ACTION_BUILD_DAYLIGHT
+            ADMIN_ACTION_RUN_STORAGE_MANAGEMENT -> FenetreCaptureService.ACTION_RUN_STORAGE_MANAGEMENT
+            else -> return
+        }
+        val intent = Intent(context, FenetreCaptureService::class.java).setAction(serviceAction)
+        ContextCompat.startForegroundService(context, intent)
     }
 
     private fun statusJson(): String {
@@ -580,13 +625,16 @@ class FenetreAdminServer(
         }
     }
 
-    private fun htmlStatus(): String {
+    private fun htmlStatus(message: String? = null): String {
         val runtime = runtimeStatus()
         val fileStatus = fileStatus()
         val storageManagement = runtime.storageManagement
         val latestAge = fileStatus.metadataCapturedAtMs?.let {
             "${maxOf(0L, (System.currentTimeMillis() - it) / 1000L)}s"
         } ?: "n/a"
+        val messageHtml = message?.let {
+            """<p class="notice">${htmlEscape(it)}</p>"""
+        }.orEmpty()
         return """
             <!doctype html>
             <html lang="en">
@@ -603,11 +651,18 @@ class FenetreAdminServer(
                 dt { color: #94a3b8; }
                 dd { margin: 0; }
                 a { color: #93c5fd; }
+                .notice { margin: 0 0 18px; padding: 10px 12px; border: 1px solid #2563eb; border-radius: 6px; background: #0f1f3d; color: #bfdbfe; }
+                .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 22px; }
+                form { margin: 0; }
+                button { border: 0; border-radius: 6px; padding: 10px 13px; background: #2563eb; color: #fff; font-weight: 650; cursor: pointer; }
+                button.secondary { background: #334155; }
+                button.danger { background: #991b1b; }
               </style>
             </head>
             <body>
               <main>
                 <h1>${htmlEscape(settings.deploymentName())} admin</h1>
+                $messageHtml
                 <dl>
                   <dt>Service</dt><dd>${if (runtime.running) "running" else "stopped"}</dd>
                   <dt>Capture</dt><dd>${if (runtime.captureInProgress) "in progress" else "idle"}</dd>
@@ -627,9 +682,28 @@ class FenetreAdminServer(
                   <dt>Metrics</dt><dd><a href="/metrics">/metrics</a></dd>
                   <dt>Settings XML</dt><dd><a href="/settings.xml">export</a> / <a href="/settings-import.html">import</a></dd>
                 </dl>
+                <div class="actions">
+                  ${adminActionButton("Capture now", ADMIN_ACTION_CAPTURE_NOW)}
+                  ${adminActionButton("Restart camera", ADMIN_ACTION_RESTART_CAMERA)}
+                  ${adminActionButton("Build daylight", ADMIN_ACTION_BUILD_DAYLIGHT, "secondary")}
+                  ${adminActionButton("Build timelapse", ADMIN_ACTION_BUILD_DAILY_TIMELAPSE, "secondary")}
+                  ${adminActionButton("Run storage", ADMIN_ACTION_RUN_STORAGE_MANAGEMENT, "secondary")}
+                  ${adminActionButton("Start capture", ADMIN_ACTION_START_CAPTURE, "secondary")}
+                  ${adminActionButton("Stop capture", ADMIN_ACTION_STOP_CAPTURE, "danger")}
+                </div>
               </main>
             </body>
             </html>
+        """.trimIndent()
+    }
+
+    private fun adminActionButton(label: String, action: String, cssClass: String = ""): String {
+        val classAttribute = if (cssClass.isBlank()) "" else """ class="$cssClass""""
+        return """
+            <form method="post" action="/action">
+              <input type="hidden" name="action" value="${htmlEscape(action)}">
+              <button type="submit"$classAttribute>${htmlEscape(label)}</button>
+            </form>
         """.trimIndent()
     }
 
@@ -1002,6 +1076,13 @@ class FenetreAdminServer(
 
     companion object {
         private const val TAG = "FenetreAdminServer"
+        private const val ADMIN_ACTION_CAPTURE_NOW = "capture_now"
+        private const val ADMIN_ACTION_RESTART_CAMERA = "restart_camera"
+        private const val ADMIN_ACTION_STOP_CAPTURE = "stop_capture"
+        private const val ADMIN_ACTION_START_CAPTURE = "start_capture"
+        private const val ADMIN_ACTION_BUILD_DAILY_TIMELAPSE = "build_daily_timelapse"
+        private const val ADMIN_ACTION_BUILD_DAYLIGHT = "build_daylight"
+        private const val ADMIN_ACTION_RUN_STORAGE_MANAGEMENT = "run_storage_management"
         private val CPU_DIR_PATTERN = Regex("""cpu\d+""")
     }
 }

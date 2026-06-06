@@ -28,11 +28,13 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
         val bitmap = source.copy(Bitmap.Config.ARGB_8888, true)
         source.recycle()
         val canvas = Canvas(bitmap)
-        if (settings.sunPathOverlayEnabled()) {
+        val sunPathBounds = if (settings.sunPathOverlayEnabled()) {
             drawSunPath(canvas, bitmap.width, bitmap.height, capturedAt)
+        } else {
+            null
         }
         if (settings.timestampOverlayEnabled()) {
-            drawTimestamp(canvas, bitmap.width, bitmap.height, capturedAt)
+            drawTimestamp(canvas, bitmap.width, bitmap.height, capturedAt, sunPathBounds)
         }
         FileOutputStream(file).use { output ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
@@ -41,7 +43,13 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
         return true
     }
 
-    private fun drawTimestamp(canvas: Canvas, width: Int, height: Int, capturedAt: ZonedDateTime) {
+    private fun drawTimestamp(
+        canvas: Canvas,
+        width: Int,
+        height: Int,
+        capturedAt: ZonedDateTime,
+        reservedBottomBounds: RectF?,
+    ) {
         val timestamp = capturedAt
             .withZoneSameInstant(zoneIdOrDefault(settings.overlayTimezone()))
             .format(TIMESTAMP_FORMATTER)
@@ -55,10 +63,11 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
         }
         val bounds = android.graphics.Rect()
         paint.getTextBounds(timestamp, 0, timestamp.length, bounds)
+        val reservedBottomInset = reservedBottomBounds?.let { height - it.top + padding } ?: 0f
         val boxLeft = width - bounds.width() - padding * 3f
-        val boxTop = height - bounds.height() - padding * 3f
+        val boxTop = height - reservedBottomInset - bounds.height() - padding * 3f
         val boxRight = width - padding
-        val boxBottom = height - padding
+        val boxBottom = height - reservedBottomInset - padding
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(150, 35, 39, 47)
         }
@@ -66,7 +75,7 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
         canvas.drawText(timestamp, boxLeft + padding, boxBottom - padding - bounds.bottom, paint)
     }
 
-    private fun drawSunPath(canvas: Canvas, width: Int, height: Int, capturedAt: ZonedDateTime) {
+    private fun drawSunPath(canvas: Canvas, width: Int, height: Int, capturedAt: ZonedDateTime): RectF {
         val zoneId = zoneIdOrDefault(settings.overlayTimezone())
         val localTime = capturedAt.withZoneSameInstant(zoneId).toLocalTime()
         val sunWindow = sunriseSunset(
@@ -76,15 +85,16 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
             capturedAt.withZoneSameInstant(zoneId).offset.totalSeconds / 3600.0,
         )
 
-        val overlayWidth = min(width * 0.92f, 1000f)
-        val overlayHeight = max(52f, overlayWidth * 0.06f)
-        val left = (width - overlayWidth) / 2f
-        val top = max(12f, height * 0.012f)
-        val bottom = top + overlayHeight
+        val bounds = sunPathBounds(width, height)
+        val overlayWidth = bounds.width()
+        val overlayHeight = bounds.height()
+        val left = bounds.left
+        val top = bounds.top
+        val bottom = bounds.bottom
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(95, 15, 18, 24)
         }
-        canvas.drawRoundRect(RectF(left, top, left + overlayWidth, bottom), 8f, 8f, bgPaint)
+        canvas.drawRoundRect(bounds, 8f, 8f, bgPaint)
 
         val minorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(125, 210, 215, 225)
@@ -132,6 +142,16 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
             3f,
             markerPaint,
         )
+        return bounds
+    }
+
+    private fun sunPathBounds(width: Int, height: Int): RectF {
+        val overlayWidth = min(width * 0.92f, 1000f)
+        val overlayHeight = max(52f, overlayWidth * 0.06f)
+        val left = (width - overlayWidth) / 2f
+        val bottom = height - max(12f, height * 0.012f)
+        val top = bottom - overlayHeight
+        return RectF(left, top, left + overlayWidth, bottom)
     }
 
     private fun sunriseSunset(date: LocalDate, latitude: Double, longitude: Double, utcOffsetHours: Double): SunWindow? {

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes" ?>
 <map>
-    <string name="deployment_name">s20.fenetre.cam</string>
-    <string name="public_base_url">https://s20.fenetre.cam/</string>
-    <string name="web_host">192.168.8.187</string>
+    <string name="deployment_name">baybridge.fenetre.cam</string>
+    <string name="public_base_url">https://baybridge.fenetre.cam/</string>
+    <string name="web_host">100.123.192.26</string>
     <string name="night_capture_strategy">MANUAL_ADAPTIVE</string>
     <string name="lens_mode">ULTRA_WIDE</string>
     <float name="night_exposure_boost_stops" value="1.0" />

@@ -395,7 +395,7 @@ class MainActivity : ComponentActivity() {
         ) {
             it.toDoubleOrNull()?.let(cameraSettings::setOverlayLongitude)
         })
-        content.addView(helpText("Timestamp is drawn at bottom right. Sun path and sunrise/sunset scheduling use the configured camera location."))
+        content.addView(helpText("Timestamp is drawn at bottom right, above the sun path when both overlays are enabled. Sun path and sunrise/sunset scheduling use the configured camera location."))
 
         content.addView(sectionTitle("Status"))
         content.addView(statusText)

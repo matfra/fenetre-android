@@ -68,6 +68,7 @@ class FenetreCaptureService : LifecycleService() {
     private var captureGeneration = 0
     private var captureTimeoutRunnable: Runnable? = null
     private var consecutiveCaptureTimeouts = 0
+    private var cameraRecoveryRunnable: Runnable? = null
     private var cooldownRunnable: Runnable? = null
     private var previousSsimSample: SsimSample? = null
     private var dynamicSsimIntervalSeconds = 0
@@ -105,6 +106,7 @@ class FenetreCaptureService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             ACTION_STOP -> stopCapture()
+            ACTION_RESTART_CAMERA -> restartCamera()
             ACTION_CAPTURE_NOW -> captureOnce()
             ACTION_BUILD_DAILY_TIMELAPSE -> buildDailyTimelapse()
             ACTION_BUILD_DAYLIGHT -> buildDaylight()
@@ -137,7 +139,30 @@ class FenetreCaptureService : LifecycleService() {
         serviceRunning = true
         startServers()
         storageManager.maybeSchedule()
-        startForeground(NOTIFICATION_ID, buildNotification("Starting capture"))
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification("Starting capture"))
+        } catch (exception: SecurityException) {
+            Log.e(TAG, "Android rejected camera foreground service start", exception)
+            running = false
+            serviceRunning = false
+            webServer?.stop()
+            webServer = null
+            adminServer?.stop()
+            adminServer = null
+            stopSelf()
+            return
+        }
+        bindCamera()
+    }
+
+    private fun restartCamera() {
+        if (!running) {
+            startCapture()
+            return
+        }
+        updateNotification("Restarting camera")
+        clearCaptureInProgress()
+        imageCapture = null
         bindCamera()
     }
 
@@ -148,6 +173,7 @@ class FenetreCaptureService : LifecycleService() {
         captureInProgress = false
         serviceCaptureInProgress = false
         captureTimeoutRunnable = null
+        cameraRecoveryRunnable = null
         cooldownRunnable = null
         webServer?.stop()
         webServer = null
@@ -227,44 +253,76 @@ class FenetreCaptureService : LifecycleService() {
     }
 
     private fun bindCamera(scheduleDelayMs: Long = 0L) {
+        cameraRecoveryRunnable?.let { mainHandler.removeCallbacks(it) }
+        cameraRecoveryRunnable = null
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener(
             {
-                val provider = providerFuture.get()
-                ensureExtensionsManager(provider)
-                lensMode = cameraSettings.lensMode()
-                val selectedCamera = cameraSelectionForLensMode(lensMode)
-                selectedCameraId = selectedCamera?.cameraId
-                selectedPhysicalCameraId = selectedCamera?.physicalCameraId
-                rotationDegrees = cameraSettings.rotationDegrees()
-                exposureMode = cameraSettings.exposureMode()
-                captureMode = resolvedCaptureMode()
-                if (captureMode != ExposureMode.AUTO) {
-                    manualExposureSettings = null
-                }
-                val activeNightStrategy = activeNightCaptureStrategy()
-                if (activeNightStrategy != NightCaptureStrategy.MANUAL_ADAPTIVE) {
-                    manualExposureSettings = null
-                }
-                val capture = buildImageCapture(captureMode)
-
-                clearCaptureInProgress()
-                provider.unbindAll()
-                val cameraSelector = cameraSelectorFor(activeNightStrategy)
-                val camera = provider.bindToLifecycle(this, cameraSelector, capture)
-                imageCapture = capture
-                if (activeNightStrategy != NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION) {
-                    val zoomState = camera.cameraInfo.zoomState
-                    if (zoomState.value == null) {
-                        zoomState.observe(this) { state -> applyLensMode(state, camera.cameraControl) }
-                    } else {
-                        applyLensMode(zoomState.value, camera.cameraControl)
+                try {
+                    val provider = providerFuture.get()
+                    ensureExtensionsManager(provider)
+                    lensMode = cameraSettings.lensMode()
+                    val selectedCamera = cameraSelectionForLensMode(lensMode)
+                    selectedCameraId = selectedCamera?.cameraId
+                    selectedPhysicalCameraId = selectedCamera?.physicalCameraId
+                    rotationDegrees = cameraSettings.rotationDegrees()
+                    exposureMode = cameraSettings.exposureMode()
+                    captureMode = resolvedCaptureMode()
+                    if (captureMode != ExposureMode.AUTO) {
+                        manualExposureSettings = null
                     }
+                    val activeNightStrategy = activeNightCaptureStrategy()
+                    if (activeNightStrategy != NightCaptureStrategy.MANUAL_ADAPTIVE) {
+                        manualExposureSettings = null
+                    }
+                    val capture = buildImageCapture(captureMode)
+
+                    clearCaptureInProgress()
+                    provider.unbindAll()
+                    val cameraSelector = cameraSelectorFor(activeNightStrategy)
+                    val camera = provider.bindToLifecycle(this, cameraSelector, capture)
+                    imageCapture = capture
+                    consecutiveCaptureTimeouts = 0
+                    if (activeNightStrategy != NightCaptureStrategy.CAMERAX_NIGHT_EXTENSION) {
+                        val zoomState = camera.cameraInfo.zoomState
+                        if (zoomState.value == null) {
+                            zoomState.observe(this) { state -> applyLensMode(state, camera.cameraControl) }
+                        } else {
+                            applyLensMode(zoomState.value, camera.cameraControl)
+                        }
+                    }
+                    scheduleNextCapture(delayMs = scheduleDelayMs)
+                } catch (exception: Exception) {
+                    Log.e(TAG, "Unable to bind camera; scheduling recovery", exception)
+                    clearCaptureInProgress()
+                    imageCapture = null
+                    try {
+                        providerFuture.get().unbindAll()
+                    } catch (_: Exception) {
+                    }
+                    scheduleCameraRecovery("Camera bind failed", CAMERA_RECOVERY_RETRY_DELAY_MS)
                 }
-                scheduleNextCapture(delayMs = scheduleDelayMs)
             },
             ContextCompat.getMainExecutor(this)
         )
+    }
+
+    private fun scheduleCameraRecovery(reason: String, delayMs: Long) {
+        if (!running || cameraRecoveryRunnable != null) {
+            return
+        }
+        val delaySeconds = delayMs / 1000L
+        updateNotification("$reason; retrying in ${delaySeconds}s")
+        val runnable = Runnable {
+            cameraRecoveryRunnable = null
+            if (!running) {
+                return@Runnable
+            }
+            Log.i(TAG, "$reason; retrying camera bind")
+            bindCamera()
+        }
+        cameraRecoveryRunnable = runnable
+        mainHandler.postDelayed(runnable, delayMs)
     }
 
     private fun ensureExtensionsManager(provider: ProcessCameraProvider) {
@@ -449,8 +507,9 @@ class FenetreCaptureService : LifecycleService() {
                     }
                     Log.e(TAG, "Capture failed", exception)
                     captureFailuresTotal += 1
-                    updateNotification("Capture failed: ${exception.message ?: exception.imageCaptureError}")
-                    scheduleNextCapture()
+                    imageCapture = null
+                    updateNotification("Capture failed; rebinding camera")
+                    bindCamera(scheduleDelayMs = CAMERA_REBIND_AFTER_ERROR_DELAY_MS)
                 }
             }
         )
@@ -504,22 +563,15 @@ class FenetreCaptureService : LifecycleService() {
             photoFile.delete()
         }
         if (consecutiveCaptureTimeouts >= CAPTURE_TIMEOUT_SERVICE_RESTART_THRESHOLD) {
-            updateNotification("Capture timed out $consecutiveCaptureTimeouts times; restarting service")
-            restartServiceAfterTimeout()
+            Log.w(TAG, "Capture timed out $consecutiveCaptureTimeouts times; keeping service alive and retrying camera")
+            scheduleCameraRecovery(
+                "Camera recovery after $consecutiveCaptureTimeouts timeouts",
+                CAMERA_RECOVERY_RETRY_DELAY_MS,
+            )
         } else {
             updateNotification("Capture timed out; rebinding camera")
             bindCamera()
         }
-    }
-
-    private fun restartServiceAfterTimeout() {
-        Handler(Looper.getMainLooper()).postDelayed({
-            ContextCompat.startForegroundService(
-                applicationContext,
-                Intent(applicationContext, FenetreCaptureService::class.java).setAction(ACTION_START),
-            )
-        }, SERVICE_RESTART_AFTER_TIMEOUT_MS)
-        stopCapture()
     }
 
     private fun captureTimeoutMs(): Long {
@@ -1104,6 +1156,7 @@ class FenetreCaptureService : LifecycleService() {
     companion object {
         const val ACTION_START = "cam.fenetre.android.START_CAPTURE"
         const val ACTION_STOP = "cam.fenetre.android.STOP_CAPTURE"
+        const val ACTION_RESTART_CAMERA = "cam.fenetre.android.RESTART_CAMERA"
         const val ACTION_CAPTURE_NOW = "cam.fenetre.android.CAPTURE_NOW"
         const val ACTION_BUILD_DAILY_TIMELAPSE = "cam.fenetre.android.BUILD_DAILY_TIMELAPSE"
         const val ACTION_BUILD_DAYLIGHT = "cam.fenetre.android.BUILD_DAYLIGHT"
@@ -1130,7 +1183,8 @@ class FenetreCaptureService : LifecycleService() {
         private const val MIN_CAPTURE_TIMEOUT_MS = 60_000L
         private const val CAPTURE_TIMEOUT_PADDING_MS = 15_000L
         private const val CAPTURE_TIMEOUT_SERVICE_RESTART_THRESHOLD = 2
-        private const val SERVICE_RESTART_AFTER_TIMEOUT_MS = 3_000L
+        private const val CAMERA_REBIND_AFTER_ERROR_DELAY_MS = 5_000L
+        private const val CAMERA_RECOVERY_RETRY_DELAY_MS = 30_000L
         private const val COOLDOWN_CHECK_INTERVAL_MS = 60_000L
         private const val INFINITY_FOCUS_DIOPTERS = 0.0f
         private const val EXPOSURE_DEADBAND = 0.08
