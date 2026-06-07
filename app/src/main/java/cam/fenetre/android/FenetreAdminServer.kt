@@ -11,6 +11,7 @@ import android.os.Debug
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
 import java.net.ServerSocket
@@ -106,6 +107,32 @@ class FenetreAdminServer(
 
                 when (path) {
                     "/" -> writeResponse(client, 200, "OK", "text/html; charset=utf-8", htmlStatus().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
+                    "/crop.html" -> writeResponse(client, 200, "OK", "text/html; charset=utf-8", cropHtml().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
+                    "/crop-source.jpg" -> writeCropSourceResponse(client, method == "HEAD")
+                    "/crop-settings" -> {
+                        if (method != "POST") {
+                            writeResponse(client, 405, "Method Not Allowed", "text/plain", "Method Not Allowed\n".toByteArray(), method == "HEAD")
+                            return
+                        }
+                        val body = readBody(input, contentLength)
+                        val rect = listOf("left", "top", "right", "bottom")
+                            .map { formField(body, it).toIntOrNull() }
+                        if (rect.any { it == null }) {
+                            writeResponse(client, 400, "Bad Request", "text/html; charset=utf-8", cropHtml("Invalid crop rectangle.", isError = true).toByteArray(StandardCharsets.UTF_8), false)
+                            return
+                        }
+                        val left = rect[0] ?: 0
+                        val top = rect[1] ?: 0
+                        val right = rect[2] ?: 0
+                        val bottom = rect[3] ?: 0
+                        if (right <= left || bottom <= top) {
+                            writeResponse(client, 400, "Bad Request", "text/html; charset=utf-8", cropHtml("Crop rectangle must have positive width and height.", isError = true).toByteArray(StandardCharsets.UTF_8), false)
+                            return
+                        }
+                        settings.setOutputCropMode(OutputCropMode.CUSTOM_RECT)
+                        settings.setOutputCropRect("$left,$top,$right,$bottom")
+                        writeResponse(client, 200, "OK", "text/html; charset=utf-8", cropHtml("Saved crop rectangle $left,$top,$right,$bottom.").toByteArray(StandardCharsets.UTF_8), false)
+                    }
                     "/action" -> {
                         if (method != "POST") {
                             writeResponse(client, 405, "Method Not Allowed", "text/plain", "Method Not Allowed\n".toByteArray(), method == "HEAD")
@@ -683,6 +710,7 @@ class FenetreAdminServer(
                   <dt>Status JSON</dt><dd><a href="/status.json">/status.json</a></dd>
                   <dt>Metrics</dt><dd><a href="/metrics">/metrics</a></dd>
                   <dt>Settings XML</dt><dd><a href="/settings.xml">export</a> / <a href="/settings-import.html">import</a></dd>
+                  <dt>Crop editor</dt><dd><a href="/crop.html">/crop.html</a></dd>
                 </dl>
                 <div class="actions">
                   ${adminActionButton("Capture now", ADMIN_ACTION_CAPTURE_NOW)}
@@ -706,6 +734,164 @@ class FenetreAdminServer(
               <input type="hidden" name="action" value="${htmlEscape(action)}">
               <button type="submit"$classAttribute>${htmlEscape(label)}</button>
             </form>
+        """.trimIndent()
+    }
+
+    private fun cropHtml(message: String? = null, isError: Boolean = false): String {
+        val cameraName = settings.cameraName()
+        val sourceFile = File(File(File(rootDir, "photos"), cameraName), "latest-source.jpg")
+        val fallbackFile = File(File(File(rootDir, "photos"), cameraName), "latest.jpg")
+        val sourceName = if (sourceFile.exists()) "latest-source.jpg" else "latest.jpg"
+        val sourceVersion = if (sourceFile.exists()) sourceFile.lastModified() else fallbackFile.lastModified()
+        val imageUrl = "/crop-source.jpg?t=$sourceVersion"
+        val rectParts = settings.outputCropRect()
+            .split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+            .takeIf { it.size == 4 }
+        val initialLeft = rectParts?.get(0) ?: 0
+        val initialTop = rectParts?.get(1) ?: 0
+        val initialRight = rectParts?.get(2) ?: 0
+        val initialBottom = rectParts?.get(3) ?: 0
+        val messageHtml = message?.let {
+            """<p class="${if (isError) "error" else "ok"}">${htmlEscape(it)}</p>"""
+        }.orEmpty()
+        return """
+            <!doctype html>
+            <html lang="en">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>${htmlEscape(settings.deploymentName())} crop</title>
+              <style>
+                :root { color-scheme: dark; font-family: Inter, Roboto, Arial, sans-serif; background: #080b10; color: #f8fafc; }
+                * { box-sizing: border-box; }
+                body { margin: 0; padding: 20px; background: #080b10; }
+                main { max-width: 1180px; margin: 0 auto; }
+                header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 12px; }
+                h1 { margin: 0; font-size: 24px; }
+                a { color: #93c5fd; }
+                p { color: #94a3b8; line-height: 1.45; }
+                .ok { color: #86efac; }
+                .error { color: #fca5a5; }
+                .editor { position: relative; width: 100%; max-height: calc(100dvh - 210px); overflow: hidden; border: 1px solid #334155; background: #020617; touch-action: none; }
+                img { display: block; width: 100%; max-height: calc(100dvh - 210px); object-fit: contain; user-select: none; }
+                .selection { position: absolute; border: 2px solid #facc15; background: rgba(250, 204, 21, .14); box-shadow: 0 0 0 9999px rgba(0,0,0,.42); pointer-events: none; }
+                form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 12px; }
+                label { display: grid; gap: 4px; color: #94a3b8; font-size: 12px; }
+                input { width: 94px; border: 1px solid #334155; border-radius: 6px; padding: 8px; background: #020617; color: #e2e8f0; font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+                button { border: 0; border-radius: 6px; padding: 9px 13px; background: #2563eb; color: #fff; font-weight: 650; cursor: pointer; }
+                .meta { margin-top: 8px; color: #94a3b8; font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+                @media (max-width: 720px) {
+                  body { padding: 12px; }
+                  header { margin-bottom: 8px; }
+                  h1 { font-size: 20px; }
+                  p { margin: 8px 0; font-size: 13px; }
+                  .editor, img { max-height: calc(100dvh - 250px); }
+                  input { width: 78px; }
+                }
+              </style>
+            </head>
+            <body>
+              <main>
+                <header>
+                  <h1>${htmlEscape(settings.deploymentName())} crop</h1>
+                  <a href="/">Admin</a>
+                </header>
+                $messageHtml
+                <p>Drag on the image to select a custom crop. The source frame is saved before output crop and resize, so saved coordinates match the capture pipeline.</p>
+                <div id="editor" class="editor">
+                  <img id="source" src="${htmlEscape(imageUrl)}" alt="Latest source frame">
+                  <div id="selection" class="selection"></div>
+                </div>
+                <form method="post" action="/crop-settings">
+                  <label>Left <input id="left" name="left" inputmode="numeric" value="$initialLeft"></label>
+                  <label>Top <input id="top" name="top" inputmode="numeric" value="$initialTop"></label>
+                  <label>Right <input id="right" name="right" inputmode="numeric" value="$initialRight"></label>
+                  <label>Bottom <input id="bottom" name="bottom" inputmode="numeric" value="$initialBottom"></label>
+                  <button type="submit">Save crop</button>
+                </form>
+                <div id="meta" class="meta">Loading image...</div>
+              </main>
+              <script>
+                const editor = document.getElementById('editor');
+                const image = document.getElementById('source');
+                const selection = document.getElementById('selection');
+                const meta = document.getElementById('meta');
+                const fields = {
+                  left: document.getElementById('left'),
+                  top: document.getElementById('top'),
+                  right: document.getElementById('right'),
+                  bottom: document.getElementById('bottom')
+                };
+                let dragStart = null;
+
+                function imageRect() {
+                  const editorRect = editor.getBoundingClientRect();
+                  const imageRect = image.getBoundingClientRect();
+                  return {
+                    left: imageRect.left - editorRect.left,
+                    top: imageRect.top - editorRect.top,
+                    width: imageRect.width,
+                    height: imageRect.height
+                  };
+                }
+
+                function screenToImage(event) {
+                  const rect = image.getBoundingClientRect();
+                  const x = Math.round((event.clientX - rect.left) * image.naturalWidth / rect.width);
+                  const y = Math.round((event.clientY - rect.top) * image.naturalHeight / rect.height);
+                  return {
+                    x: Math.max(0, Math.min(image.naturalWidth, x)),
+                    y: Math.max(0, Math.min(image.naturalHeight, y))
+                  };
+                }
+
+                function updateSelection() {
+                  const left = Number(fields.left.value) || 0;
+                  const top = Number(fields.top.value) || 0;
+                  const right = Number(fields.right.value) || 0;
+                  const bottom = Number(fields.bottom.value) || 0;
+                  const rect = imageRect();
+                  const scaleX = rect.width / image.naturalWidth;
+                  const scaleY = rect.height / image.naturalHeight;
+                  selection.style.left = (rect.left + left * scaleX) + 'px';
+                  selection.style.top = (rect.top + top * scaleY) + 'px';
+                  selection.style.width = Math.max(0, (right - left) * scaleX) + 'px';
+                  selection.style.height = Math.max(0, (bottom - top) * scaleY) + 'px';
+                  meta.textContent = image.naturalWidth + 'x' + image.naturalHeight + ' source; crop ' + left + ',' + top + ',' + right + ',' + bottom;
+                }
+
+                function setFields(a, b) {
+                  fields.left.value = Math.min(a.x, b.x);
+                  fields.top.value = Math.min(a.y, b.y);
+                  fields.right.value = Math.max(a.x, b.x);
+                  fields.bottom.value = Math.max(a.y, b.y);
+                  updateSelection();
+                }
+
+                image.addEventListener('load', updateSelection);
+                window.addEventListener('resize', updateSelection);
+                Object.values(fields).forEach((field) => field.addEventListener('input', updateSelection));
+                editor.addEventListener('pointerdown', (event) => {
+                  event.preventDefault();
+                  editor.setPointerCapture(event.pointerId);
+                  dragStart = screenToImage(event);
+                  setFields(dragStart, dragStart);
+                });
+                editor.addEventListener('pointermove', (event) => {
+                  if (!dragStart) return;
+                  event.preventDefault();
+                  setFields(dragStart, screenToImage(event));
+                });
+                editor.addEventListener('pointerup', (event) => {
+                  if (!dragStart) return;
+                  event.preventDefault();
+                  setFields(dragStart, screenToImage(event));
+                  dragStart = null;
+                });
+              </script>
+            </body>
+            </html>
         """.trimIndent()
     }
 
@@ -1038,6 +1224,31 @@ class FenetreAdminServer(
         output.flush()
     }
 
+    private fun writeCropSourceResponse(socket: Socket, headOnly: Boolean) {
+        val cameraName = settings.cameraName()
+        val sourceFile = File(File(File(rootDir, "photos"), cameraName), "latest-source.jpg")
+        val fallbackFile = File(File(File(rootDir, "photos"), cameraName), "latest.jpg")
+        val file = sourceFile.takeIf { it.exists() } ?: fallbackFile.takeIf { it.exists() }
+        if (file == null) {
+            writeResponse(socket, 404, "Not Found", "text/plain", "Not Found\n".toByteArray(), headOnly)
+            return
+        }
+        val output = BufferedOutputStream(socket.getOutputStream())
+        val header = "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: image/jpeg\r\n" +
+            "Content-Length: ${file.length()}\r\n" +
+            "Connection: close\r\n" +
+            "Access-Control-Allow-Origin: *\r\n" +
+            "\r\n"
+        output.write(header.toByteArray(StandardCharsets.US_ASCII))
+        if (!headOnly) {
+            BufferedInputStream(file.inputStream()).use { input ->
+                input.copyTo(output, FILE_COPY_BUFFER_SIZE)
+            }
+        }
+        output.flush()
+    }
+
     private fun jsonString(value: String): String {
         return buildString {
             append('"')
@@ -1078,6 +1289,7 @@ class FenetreAdminServer(
 
     companion object {
         private const val TAG = "FenetreAdminServer"
+        private const val FILE_COPY_BUFFER_SIZE = 64 * 1024
         private const val ADMIN_ACTION_CAPTURE_NOW = "capture_now"
         private const val ADMIN_ACTION_RESTART_CAMERA = "restart_camera"
         private const val ADMIN_ACTION_STOP_CAPTURE = "stop_capture"

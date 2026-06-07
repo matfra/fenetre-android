@@ -25,6 +25,12 @@ class FenetreStorage(context: Context, private val settings: FenetreCameraSettin
         return File(cameraDir, "latest.jpg")
     }
 
+    fun latestSourceFile(): File {
+        val cameraDir = File(File(rootDir, "photos"), cameraName())
+        cameraDir.mkdirs()
+        return File(cameraDir, "latest-source.jpg")
+    }
+
     fun metadataFile(): File {
         val cameraDir = File(File(rootDir, "photos"), cameraName())
         cameraDir.mkdirs()
