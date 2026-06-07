@@ -18,10 +18,12 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.time.LocalDate
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
+import kotlin.math.roundToInt
 
 class FenetreAdminServer(
     private val context: Context,
@@ -109,6 +111,22 @@ class FenetreAdminServer(
                     "/" -> writeResponse(client, 200, "OK", "text/html; charset=utf-8", htmlStatus().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
                     "/crop.html" -> writeResponse(client, 200, "OK", "text/html; charset=utf-8", cropHtml().toByteArray(StandardCharsets.UTF_8), method == "HEAD")
                     "/crop-source.jpg" -> writeCropSourceResponse(client, method == "HEAD")
+                    "/overlay-settings" -> {
+                        if (method != "POST") {
+                            writeResponse(client, 405, "Method Not Allowed", "text/plain", "Method Not Allowed\n".toByteArray(), method == "HEAD")
+                            return
+                        }
+                        val body = readBody(input, contentLength)
+                        settings.setTimestampOverlayEnabled(formField(body, "timestamp_overlay_enabled") == "on")
+                        settings.setSunPathOverlayEnabled(formField(body, "sun_path_overlay_enabled") == "on")
+                        formField(body, "timestamp_overlay_position")
+                            .let { name -> TimestampOverlayPosition.entries.firstOrNull { it.name == name } }
+                            ?.let(settings::setTimestampOverlayPosition)
+                        formField(body, "sun_path_overlay_position")
+                            .let { name -> SunPathOverlayPosition.entries.firstOrNull { it.name == name } }
+                            ?.let(settings::setSunPathOverlayPosition)
+                        writeResponse(client, 200, "OK", "text/html; charset=utf-8", htmlStatus("Saved overlay settings.").toByteArray(StandardCharsets.UTF_8), false)
+                    }
                     "/crop-settings" -> {
                         if (method != "POST") {
                             writeResponse(client, 405, "Method Not Allowed", "text/plain", "Method Not Allowed\n".toByteArray(), method == "HEAD")
@@ -129,9 +147,20 @@ class FenetreAdminServer(
                             writeResponse(client, 400, "Bad Request", "text/html; charset=utf-8", cropHtml("Crop rectangle must have positive width and height.", isError = true).toByteArray(StandardCharsets.UTF_8), false)
                             return
                         }
+                        val resizeWidth = formField(body, "resize_width").toIntOrNull()?.coerceAtLeast(0) ?: 0
+                        val cropWidth = right - left
+                        val cropHeight = bottom - top
+                        val resizeSize = if (resizeWidth <= 0 || resizeWidth >= cropWidth) {
+                            ""
+                        } else {
+                            val resizeHeight = (cropHeight.toDouble() * resizeWidth.toDouble() / cropWidth.toDouble()).roundToInt().coerceAtLeast(1)
+                            "${resizeWidth}x${resizeHeight}"
+                        }
                         settings.setOutputCropMode(OutputCropMode.CUSTOM_RECT)
                         settings.setOutputCropRect("$left,$top,$right,$bottom")
-                        writeResponse(client, 200, "OK", "text/html; charset=utf-8", cropHtml("Saved crop rectangle $left,$top,$right,$bottom.").toByteArray(StandardCharsets.UTF_8), false)
+                        settings.setOutputResizeSize(resizeSize)
+                        val resizeMessage = resizeSize.ifBlank { "native crop size" }
+                        writeResponse(client, 200, "OK", "text/html; charset=utf-8", cropHtml("Saved crop rectangle $left,$top,$right,$bottom with output $resizeMessage.").toByteArray(StandardCharsets.UTF_8), false)
                     }
                     "/action" -> {
                         if (method != "POST") {
@@ -161,7 +190,7 @@ class FenetreAdminServer(
                             "application/xml; charset=utf-8",
                             settings.exportXml().toByteArray(StandardCharsets.UTF_8),
                             method == "HEAD",
-                            mapOf("Content-Disposition" to "attachment; filename=\"fenetre-camera-settings.xml\""),
+                            mapOf("Content-Disposition" to "attachment; filename=\"${settingsExportFilename()}\""),
                         )
                     }
                     "/settings-import.html" -> {
@@ -227,6 +256,14 @@ class FenetreAdminServer(
             ?.substringAfter("=", "")
             ?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
             ?: ""
+    }
+
+    private fun settingsExportFilename(): String {
+        val deployment = settings.deploymentName()
+            .replace(Regex("""[^A-Za-z0-9._-]"""), "-")
+            .trim('-')
+            .ifEmpty { "fenetre-camera" }
+        return "$deployment-${LocalDate.now()}-settings.xml"
     }
 
     private fun adminActionMessage(action: String): String? {
@@ -323,7 +360,9 @@ class FenetreAdminServer(
                 "vignette_correction_radius": ${settings.vignetteCorrectionRadius()},
                 "low_noise_iso": ${settings.lowNoiseIso()},
                 "timestamp_overlay": ${settings.timestampOverlayEnabled()},
+                "timestamp_overlay_position": ${jsonString(settings.timestampOverlayPosition().name.lowercase())},
                 "sun_path_overlay": ${settings.sunPathOverlayEnabled()},
+                "sun_path_overlay_position": ${jsonString(settings.sunPathOverlayPosition().name.lowercase())},
                 "overlay_timezone": ${jsonString(settings.overlayTimezone())},
                 "overlay_lat": ${settings.overlayLatitude()},
                 "overlay_lon": ${settings.overlayLongitude()},
@@ -683,6 +722,10 @@ class FenetreAdminServer(
                 .notice { margin: 0 0 18px; padding: 10px 12px; border: 1px solid #2563eb; border-radius: 6px; background: #0f1f3d; color: #bfdbfe; }
                 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 22px; }
                 form { margin: 0; }
+                .settings-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 18px 0 22px; padding: 12px; border: 1px solid #1f2937; border-radius: 8px; background: #0b111b; }
+                .settings-form label { display: grid; gap: 5px; color: #94a3b8; font-size: 12px; }
+                .settings-form label.check { display: flex; gap: 8px; align-items: center; padding-bottom: 9px; }
+                .settings-form select { border: 1px solid #334155; border-radius: 6px; padding: 8px; background: #020617; color: #e2e8f0; }
                 button { border: 0; border-radius: 6px; padding: 10px 13px; background: #2563eb; color: #fff; font-weight: 650; cursor: pointer; }
                 button.secondary { background: #334155; }
                 button.danger { background: #991b1b; }
@@ -712,6 +755,7 @@ class FenetreAdminServer(
                   <dt>Settings XML</dt><dd><a href="/settings.xml">export</a> / <a href="/settings-import.html">import</a></dd>
                   <dt>Crop editor</dt><dd><a href="/crop.html">/crop.html</a></dd>
                 </dl>
+                ${overlaySettingsForm()}
                 <div class="actions">
                   ${adminActionButton("Capture now", ADMIN_ACTION_CAPTURE_NOW)}
                   ${adminActionButton("Restart camera", ADMIN_ACTION_RESTART_CAMERA)}
@@ -737,6 +781,33 @@ class FenetreAdminServer(
         """.trimIndent()
     }
 
+    private fun overlaySettingsForm(): String {
+        return """
+            <form class="settings-form" method="post" action="/overlay-settings">
+              <label class="check"><input type="checkbox" name="timestamp_overlay_enabled"${checked(settings.timestampOverlayEnabled())}> Timestamp</label>
+              <label>Timestamp position
+                <select name="timestamp_overlay_position">
+                  ${TimestampOverlayPosition.entries.joinToString("\n") { option(it.name, it.label, settings.timestampOverlayPosition() == it) }}
+                </select>
+              </label>
+              <label class="check"><input type="checkbox" name="sun_path_overlay_enabled"${checked(settings.sunPathOverlayEnabled())}> Sun path</label>
+              <label>Sun path position
+                <select name="sun_path_overlay_position">
+                  ${SunPathOverlayPosition.entries.joinToString("\n") { option(it.name, it.label, settings.sunPathOverlayPosition() == it) }}
+                </select>
+              </label>
+              <button type="submit">Save overlays</button>
+            </form>
+        """.trimIndent()
+    }
+
+    private fun checked(value: Boolean): String = if (value) " checked" else ""
+
+    private fun option(value: String, label: String, selected: Boolean): String {
+        val selectedAttribute = if (selected) " selected" else ""
+        return """<option value="${htmlEscape(value)}"$selectedAttribute>${htmlEscape(label)}</option>"""
+    }
+
     private fun cropHtml(message: String? = null, isError: Boolean = false): String {
         val cameraName = settings.cameraName()
         val sourceFile = File(File(File(rootDir, "photos"), cameraName), "latest-source.jpg")
@@ -752,6 +823,11 @@ class FenetreAdminServer(
         val initialTop = rectParts?.get(1) ?: 0
         val initialRight = rectParts?.get(2) ?: 0
         val initialBottom = rectParts?.get(3) ?: 0
+        val resizeParts = settings.outputResizeSize()
+            .split("x")
+            .mapNotNull { it.trim().toIntOrNull() }
+            .takeIf { it.size == 2 }
+        val initialResizeWidth = resizeParts?.get(0) ?: 0
         val messageHtml = message?.let {
             """<p class="${if (isError) "error" else "ok"}">${htmlEscape(it)}</p>"""
         }.orEmpty()
@@ -775,12 +851,26 @@ class FenetreAdminServer(
                 .error { color: #fca5a5; }
                 .editor { position: relative; width: 100%; max-height: calc(100dvh - 210px); overflow: hidden; border: 1px solid #334155; background: #020617; touch-action: none; }
                 img { display: block; width: 100%; max-height: calc(100dvh - 210px); object-fit: contain; user-select: none; }
-                .selection { position: absolute; border: 2px solid #facc15; background: rgba(250, 204, 21, .14); box-shadow: 0 0 0 9999px rgba(0,0,0,.42); pointer-events: none; }
+                .selection { position: absolute; border: 2px solid #facc15; background: rgba(250, 204, 21, .14); box-shadow: 0 0 0 9999px rgba(0,0,0,.42); touch-action: none; }
+                .handle { position: absolute; z-index: 2; background: #facc15; border: 2px solid #020617; border-radius: 999px; touch-action: none; }
+                .handle.n, .handle.s { left: 50%; width: 46px; height: 14px; margin-left: -23px; cursor: ns-resize; }
+                .handle.e, .handle.w { top: 50%; width: 14px; height: 46px; margin-top: -23px; cursor: ew-resize; }
+                .handle.n { top: -8px; }
+                .handle.s { bottom: -8px; }
+                .handle.e { right: -8px; }
+                .handle.w { left: -8px; }
+                .handle.nw, .handle.ne, .handle.sw, .handle.se { width: 24px; height: 24px; }
+                .handle.nw { left: -13px; top: -13px; cursor: nwse-resize; }
+                .handle.ne { right: -13px; top: -13px; cursor: nesw-resize; }
+                .handle.sw { left: -13px; bottom: -13px; cursor: nesw-resize; }
+                .handle.se { right: -13px; bottom: -13px; cursor: nwse-resize; }
                 form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 12px; }
                 label { display: grid; gap: 4px; color: #94a3b8; font-size: 12px; }
                 input { width: 94px; border: 1px solid #334155; border-radius: 6px; padding: 8px; background: #020617; color: #e2e8f0; font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+                input[type="range"] { width: min(360px, 100%); padding: 0; accent-color: #60a5fa; }
+                .resize-control { flex: 1 1 300px; }
                 button { border: 0; border-radius: 6px; padding: 9px 13px; background: #2563eb; color: #fff; font-weight: 650; cursor: pointer; }
-                .meta { margin-top: 8px; color: #94a3b8; font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+                .meta { display: grid; gap: 3px; margin-top: 8px; color: #94a3b8; font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
                 @media (max-width: 720px) {
                   body { padding: 12px; }
                   header { margin-bottom: 8px; }
@@ -801,22 +891,40 @@ class FenetreAdminServer(
                 <p>Drag on the image to select a custom crop. The source frame is saved before output crop and resize, so saved coordinates match the capture pipeline.</p>
                 <div id="editor" class="editor">
                   <img id="source" src="${htmlEscape(imageUrl)}" alt="Latest source frame">
-                  <div id="selection" class="selection"></div>
+                  <div id="selection" class="selection">
+                    <div class="handle n" data-handle="n"></div>
+                    <div class="handle e" data-handle="e"></div>
+                    <div class="handle s" data-handle="s"></div>
+                    <div class="handle w" data-handle="w"></div>
+                    <div class="handle nw" data-handle="nw"></div>
+                    <div class="handle ne" data-handle="ne"></div>
+                    <div class="handle sw" data-handle="sw"></div>
+                    <div class="handle se" data-handle="se"></div>
+                  </div>
                 </div>
                 <form method="post" action="/crop-settings">
                   <label>Left <input id="left" name="left" inputmode="numeric" value="$initialLeft"></label>
                   <label>Top <input id="top" name="top" inputmode="numeric" value="$initialTop"></label>
                   <label>Right <input id="right" name="right" inputmode="numeric" value="$initialRight"></label>
                   <label>Bottom <input id="bottom" name="bottom" inputmode="numeric" value="$initialBottom"></label>
+                  <label class="resize-control">Resize width <input id="resizeWidth" name="resize_width" type="range" min="0" max="0" step="1" value="$initialResizeWidth"></label>
                   <button type="submit">Save crop</button>
                 </form>
-                <div id="meta" class="meta">Loading image...</div>
+                <div class="meta">
+                  <div id="sourceMeta">Loading image...</div>
+                  <div id="cropMeta"></div>
+                  <div id="resizeMeta"></div>
+                </div>
               </main>
               <script>
                 const editor = document.getElementById('editor');
                 const image = document.getElementById('source');
                 const selection = document.getElementById('selection');
-                const meta = document.getElementById('meta');
+                const sourceMeta = document.getElementById('sourceMeta');
+                const cropMeta = document.getElementById('cropMeta');
+                const resizeMeta = document.getElementById('resizeMeta');
+                const resizeWidth = document.getElementById('resizeWidth');
+                const handles = Array.from(document.querySelectorAll('[data-handle]'));
                 const fields = {
                   left: document.getElementById('left'),
                   top: document.getElementById('top'),
@@ -824,6 +932,7 @@ class FenetreAdminServer(
                   bottom: document.getElementById('bottom')
                 };
                 let dragStart = null;
+                let handleDrag = null;
 
                 function imageRect() {
                   const editorRect = editor.getBoundingClientRect();
@@ -851,6 +960,16 @@ class FenetreAdminServer(
                   const top = Number(fields.top.value) || 0;
                   const right = Number(fields.right.value) || 0;
                   const bottom = Number(fields.bottom.value) || 0;
+                  const cropWidth = Math.max(0, right - left);
+                  const cropHeight = Math.max(0, bottom - top);
+                  const previousValue = Number(resizeWidth.value) || 0;
+                  resizeWidth.max = cropWidth;
+                  if (previousValue > cropWidth) {
+                    resizeWidth.value = 0;
+                  }
+                  const requestedWidth = Number(resizeWidth.value) || 0;
+                  const finalWidth = requestedWidth > 0 && requestedWidth < cropWidth ? requestedWidth : cropWidth;
+                  const finalHeight = cropWidth > 0 ? Math.max(1, Math.round(cropHeight * finalWidth / cropWidth)) : 0;
                   const rect = imageRect();
                   const scaleX = rect.width / image.naturalWidth;
                   const scaleY = rect.height / image.naturalHeight;
@@ -858,7 +977,11 @@ class FenetreAdminServer(
                   selection.style.top = (rect.top + top * scaleY) + 'px';
                   selection.style.width = Math.max(0, (right - left) * scaleX) + 'px';
                   selection.style.height = Math.max(0, (bottom - top) * scaleY) + 'px';
-                  meta.textContent = image.naturalWidth + 'x' + image.naturalHeight + ' source; crop ' + left + ',' + top + ',' + right + ',' + bottom;
+                  sourceMeta.textContent = image.naturalWidth + 'x' + image.naturalHeight + ' source';
+                  cropMeta.textContent = 'Crop ' + left + ',' + top + ',' + right + ',' + bottom + ' (' + cropWidth + 'x' + cropHeight + ')';
+                  resizeMeta.textContent = requestedWidth > 0 && requestedWidth < cropWidth
+                    ? 'Final output ' + finalWidth + 'x' + finalHeight
+                    : 'Final output ' + cropWidth + 'x' + cropHeight + ' (native crop size)';
                 }
 
                 function setFields(a, b) {
@@ -869,9 +992,61 @@ class FenetreAdminServer(
                   updateSelection();
                 }
 
+                function currentCrop() {
+                  return {
+                    left: Number(fields.left.value) || 0,
+                    top: Number(fields.top.value) || 0,
+                    right: Number(fields.right.value) || 0,
+                    bottom: Number(fields.bottom.value) || 0
+                  };
+                }
+
+                function setCrop(crop) {
+                  const left = Math.max(0, Math.min(image.naturalWidth, crop.left));
+                  const top = Math.max(0, Math.min(image.naturalHeight, crop.top));
+                  const right = Math.max(0, Math.min(image.naturalWidth, crop.right));
+                  const bottom = Math.max(0, Math.min(image.naturalHeight, crop.bottom));
+                  fields.left.value = Math.min(left, right);
+                  fields.top.value = Math.min(top, bottom);
+                  fields.right.value = Math.max(left, right);
+                  fields.bottom.value = Math.max(top, bottom);
+                  updateSelection();
+                }
+
+                function applyHandle(handle, point) {
+                  const crop = currentCrop();
+                  const minSize = 1;
+                  if (handle.includes('w')) crop.left = Math.min(point.x, crop.right - minSize);
+                  if (handle.includes('e')) crop.right = Math.max(point.x, crop.left + minSize);
+                  if (handle.includes('n')) crop.top = Math.min(point.y, crop.bottom - minSize);
+                  if (handle.includes('s')) crop.bottom = Math.max(point.y, crop.top + minSize);
+                  setCrop(crop);
+                }
+
                 image.addEventListener('load', updateSelection);
                 window.addEventListener('resize', updateSelection);
                 Object.values(fields).forEach((field) => field.addEventListener('input', updateSelection));
+                resizeWidth.addEventListener('input', updateSelection);
+                handles.forEach((handleElement) => {
+                  handleElement.addEventListener('pointerdown', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleElement.setPointerCapture(event.pointerId);
+                    handleDrag = handleElement.dataset.handle;
+                    applyHandle(handleDrag, screenToImage(event));
+                  });
+                  handleElement.addEventListener('pointermove', (event) => {
+                    if (!handleDrag) return;
+                    event.preventDefault();
+                    applyHandle(handleDrag, screenToImage(event));
+                  });
+                  handleElement.addEventListener('pointerup', (event) => {
+                    if (!handleDrag) return;
+                    event.preventDefault();
+                    applyHandle(handleDrag, screenToImage(event));
+                    handleDrag = null;
+                  });
+                });
                 editor.addEventListener('pointerdown', (event) => {
                   event.preventDefault();
                   editor.setPointerCapture(event.pointerId);

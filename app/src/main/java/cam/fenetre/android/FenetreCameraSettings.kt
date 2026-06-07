@@ -43,6 +43,18 @@ enum class OutputCropMode(val label: String) {
     CUSTOM_RECT("Custom rectangle"),
 }
 
+enum class TimestampOverlayPosition(val label: String) {
+    TOP_LEFT("Top left"),
+    TOP_RIGHT("Top right"),
+    BOTTOM_LEFT("Bottom left"),
+    BOTTOM_RIGHT("Bottom right"),
+}
+
+enum class SunPathOverlayPosition(val label: String) {
+    TOP("Top"),
+    BOTTOM("Bottom"),
+}
+
 class FenetreCameraSettings(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = context.getSharedPreferences("fenetre_camera", Context.MODE_PRIVATE)
@@ -101,6 +113,24 @@ class FenetreCameraSettings(context: Context) {
         preferences.edit()
             .putString(KEY_OUTPUT_CROP_RECT, cleaned.takeIf { it.isEmpty() || CROP_RECT_PATTERN.matches(it) }.orEmpty())
             .apply()
+    }
+
+    fun timestampOverlayPosition(): TimestampOverlayPosition {
+        val name = preferences.getString(KEY_TIMESTAMP_OVERLAY_POSITION, TimestampOverlayPosition.BOTTOM_RIGHT.name)
+        return TimestampOverlayPosition.entries.firstOrNull { it.name == name } ?: TimestampOverlayPosition.BOTTOM_RIGHT
+    }
+
+    fun setTimestampOverlayPosition(position: TimestampOverlayPosition) {
+        preferences.edit().putString(KEY_TIMESTAMP_OVERLAY_POSITION, position.name).apply()
+    }
+
+    fun sunPathOverlayPosition(): SunPathOverlayPosition {
+        val name = preferences.getString(KEY_SUN_PATH_OVERLAY_POSITION, SunPathOverlayPosition.BOTTOM.name)
+        return SunPathOverlayPosition.entries.firstOrNull { it.name == name } ?: SunPathOverlayPosition.BOTTOM
+    }
+
+    fun setSunPathOverlayPosition(position: SunPathOverlayPosition) {
+        preferences.edit().putString(KEY_SUN_PATH_OVERLAY_POSITION, position.name).apply()
     }
 
     fun captureJpegSize(): String {
@@ -883,7 +913,9 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_WIDE_NIGHT_EXPOSURE_SECONDS = "wide_night_exposure_seconds"
         private const val KEY_TELE_NIGHT_EXPOSURE_SECONDS = "tele_night_exposure_seconds"
         private const val KEY_TIMESTAMP_OVERLAY_ENABLED = "timestamp_overlay_enabled"
+        private const val KEY_TIMESTAMP_OVERLAY_POSITION = "timestamp_overlay_position"
         private const val KEY_SUN_PATH_OVERLAY_ENABLED = "sun_path_overlay_enabled"
+        private const val KEY_SUN_PATH_OVERLAY_POSITION = "sun_path_overlay_position"
         private const val KEY_OVERLAY_TIMEZONE = "overlay_timezone"
         private const val KEY_OVERLAY_LATITUDE = "overlay_latitude"
         private const val KEY_OVERLAY_LONGITUDE = "overlay_longitude"

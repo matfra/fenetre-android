@@ -377,9 +377,11 @@ class MainActivity : ComponentActivity() {
         content.addView(settingCheckBox("Timestamp overlay", cameraSettings.timestampOverlayEnabled()) {
             cameraSettings.setTimestampOverlayEnabled(it)
         })
+        content.addView(timestampOverlayPositionSpinner())
         content.addView(settingCheckBox("Sun path overlay", cameraSettings.sunPathOverlayEnabled()) {
             cameraSettings.setSunPathOverlayEnabled(it)
         })
+        content.addView(sunPathOverlayPositionSpinner())
         content.addView(settingEditText("Overlay timezone", cameraSettings.overlayTimezone()) {
             cameraSettings.setOverlayTimezone(it)
         })
@@ -399,7 +401,7 @@ class MainActivity : ComponentActivity() {
         ) {
             it.toDoubleOrNull()?.let(cameraSettings::setOverlayLongitude)
         })
-        content.addView(helpText("Timestamp is drawn at bottom right, above the sun path when both overlays are enabled. Sun path and sunrise/sunset scheduling use the configured camera location."))
+        content.addView(helpText("Overlay positions apply to newly captured images. Sun path and sunrise/sunset scheduling use the configured camera location."))
 
         content.addView(sectionTitle("Status"))
         content.addView(statusText)
@@ -576,6 +578,69 @@ class MainActivity : ComponentActivity() {
             setPadding(0, 4, 0, 4)
             addView(TextView(this@MainActivity).apply {
                 text = "Output crop"
+                textSize = 15f
+                setTextColor(0xff374151.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.75f)
+            })
+            addView(spinner)
+        }
+    }
+
+    private fun timestampOverlayPositionSpinner(): LinearLayout {
+        val values = TimestampOverlayPosition.entries
+        val spinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                values.map { it.label },
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            setSelection(values.indexOf(cameraSettings.timestampOverlayPosition()).coerceAtLeast(0), false)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    cameraSettings.setTimestampOverlayPosition(values[position])
+                    updateStatus("${settingsSummary()}; saved Timestamp position")
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        return settingSpinnerRow("Timestamp position", spinner)
+    }
+
+    private fun sunPathOverlayPositionSpinner(): LinearLayout {
+        val values = SunPathOverlayPosition.entries
+        val spinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                values.map { it.label },
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            setSelection(values.indexOf(cameraSettings.sunPathOverlayPosition()).coerceAtLeast(0), false)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    cameraSettings.setSunPathOverlayPosition(values[position])
+                    updateStatus("${settingsSummary()}; saved Sun path position")
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        return settingSpinnerRow("Sun path position", spinner)
+    }
+
+    private fun settingSpinnerRow(label: String, spinner: Spinner): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 4, 0, 4)
+            addView(TextView(this@MainActivity).apply {
+                text = label
                 textSize = 15f
                 setTextColor(0xff374151.toInt())
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.75f)

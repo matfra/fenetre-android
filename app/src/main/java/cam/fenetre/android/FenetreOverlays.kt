@@ -34,7 +34,7 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
             null
         }
         if (settings.timestampOverlayEnabled()) {
-            drawTimestamp(canvas, bitmap.width, bitmap.height, capturedAt, sunPathBounds)
+            drawTimestamp(canvas, bitmap.width, bitmap.height, capturedAt, sunPathBounds, settings.sunPathOverlayPosition())
         }
         FileOutputStream(file).use { output ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, output)
@@ -49,6 +49,7 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
         height: Int,
         capturedAt: ZonedDateTime,
         reservedBottomBounds: RectF?,
+        sunPathPosition: SunPathOverlayPosition,
     ) {
         val timestamp = capturedAt
             .withZoneSameInstant(zoneIdOrDefault(settings.overlayTimezone()))
@@ -63,11 +64,22 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
         }
         val bounds = android.graphics.Rect()
         paint.getTextBounds(timestamp, 0, timestamp.length, bounds)
-        val reservedBottomInset = reservedBottomBounds?.let { height - it.top + padding } ?: 0f
-        val boxLeft = width - bounds.width() - padding * 3f
-        val boxTop = height - reservedBottomInset - bounds.height() - padding * 3f
-        val boxRight = width - padding
-        val boxBottom = height - reservedBottomInset - padding
+        val position = settings.timestampOverlayPosition()
+        val reservedInset = reservedBottomBounds?.let {
+            if (sunPathPosition == SunPathOverlayPosition.BOTTOM && position.isBottom()) {
+                height - it.top + padding
+            } else if (sunPathPosition == SunPathOverlayPosition.TOP && position.isTop()) {
+                it.bottom + padding
+            } else {
+                0f
+            }
+        } ?: 0f
+        val boxWidth = bounds.width() + padding * 2f
+        val boxHeight = bounds.height() + padding * 2f
+        val boxLeft = if (position.isLeft()) padding else width - boxWidth - padding
+        val boxTop = if (position.isTop()) padding + reservedInset else height - reservedInset - boxHeight - padding
+        val boxRight = boxLeft + boxWidth
+        val boxBottom = boxTop + boxHeight
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(150, 35, 39, 47)
         }
@@ -149,9 +161,26 @@ class FenetreOverlays(private val settings: FenetreCameraSettings) {
         val overlayWidth = min(width * 0.92f, 1000f)
         val overlayHeight = max(52f, overlayWidth * 0.06f)
         val left = (width - overlayWidth) / 2f
-        val bottom = height - max(12f, height * 0.012f)
+        val margin = max(12f, height * 0.012f)
+        val bottom = if (settings.sunPathOverlayPosition() == SunPathOverlayPosition.TOP) {
+            margin + overlayHeight
+        } else {
+            height - margin
+        }
         val top = bottom - overlayHeight
         return RectF(left, top, left + overlayWidth, bottom)
+    }
+
+    private fun TimestampOverlayPosition.isLeft(): Boolean {
+        return this == TimestampOverlayPosition.TOP_LEFT || this == TimestampOverlayPosition.BOTTOM_LEFT
+    }
+
+    private fun TimestampOverlayPosition.isTop(): Boolean {
+        return this == TimestampOverlayPosition.TOP_LEFT || this == TimestampOverlayPosition.TOP_RIGHT
+    }
+
+    private fun TimestampOverlayPosition.isBottom(): Boolean {
+        return !isTop()
     }
 
     private fun sunriseSunset(date: LocalDate, latitude: Double, longitude: Double, utcOffsetHours: Double): SunWindow? {
