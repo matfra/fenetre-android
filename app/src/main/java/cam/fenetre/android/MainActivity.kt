@@ -162,7 +162,11 @@ class MainActivity : ComponentActivity() {
         content.addView(settingEditText("Postprocess output size", cameraSettings.outputResizeSize()) {
             cameraSettings.setOutputResizeSize(it)
         })
-        content.addView(helpText("Leave empty for native output. Use WIDTHxHEIGHT, for example 2000x1500."))
+        content.addView(outputCropModeSpinner())
+        content.addView(settingEditText("Output crop rectangle", cameraSettings.outputCropRect()) {
+            cameraSettings.setOutputCropRect(it)
+        })
+        content.addView(helpText("Leave output size empty for native output. Use WIDTHxHEIGHT for resize. Custom crop uses left,top,right,bottom in the pre-resize image and is applied before resizing."))
 
         content.addView(sectionTitle("Deployment"))
         content.addView(settingEditText("Camera name", cameraSettings.cameraName()) {
@@ -537,6 +541,41 @@ class MainActivity : ComponentActivity() {
             setPadding(0, 4, 0, 4)
             addView(TextView(this@MainActivity).apply {
                 text = "Capture JPEG size"
+                textSize = 15f
+                setTextColor(0xff374151.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.75f)
+            })
+            addView(spinner)
+        }
+    }
+
+    private fun outputCropModeSpinner(): LinearLayout {
+        val values = OutputCropMode.entries
+        val spinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                values.map { it.label },
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            setSelection(values.indexOf(cameraSettings.outputCropMode()).coerceAtLeast(0), false)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    cameraSettings.setOutputCropMode(values[position])
+                    updateStatus("${settingsSummary()}; saved Output crop")
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 4, 0, 4)
+            addView(TextView(this@MainActivity).apply {
+                text = "Output crop"
                 textSize = 15f
                 setTextColor(0xff374151.toInt())
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.75f)
@@ -983,7 +1022,14 @@ class MainActivity : ComponentActivity() {
         val adaptiveIso = "; night ISO ${cameraSettings.nightAdaptiveIsoThreshold()}"
         val captureSize = cameraSettings.captureJpegSize().ifEmpty { "largest" }
         val outputSize = cameraSettings.outputResizeSize().ifEmpty { "native" }
-        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; capture $captureSize; output $outputSize; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$adaptiveIso$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$lowBattery$storageManagement"
+        val outputCrop = if (cameraSettings.outputCropMode() == OutputCropMode.NONE) {
+            ""
+        } else if (cameraSettings.outputCropMode() == OutputCropMode.CUSTOM_RECT) {
+            " ${cameraSettings.outputCropMode().label} ${cameraSettings.outputCropRect()}"
+        } else {
+            " ${cameraSettings.outputCropMode().label}"
+        }
+        return "Camera ${cameraSettings.cameraName()}; lens ${cameraSettings.lensMode().label}$focus; exposure ${cameraSettings.exposureMode().label}; rotate ${cameraSettings.rotationDegrees()}; capture $captureSize; output $outputSize$outputCrop; every ${cameraSettings.captureIntervalSeconds()}s; daily ${cameraSettings.dailyTimelapseEncoderMode().label}; night ${cameraSettings.nightCaptureStrategy().label}; target ${cameraSettings.manualNightTargetLuma()}$adaptiveIso$vignette; boost ${cameraSettings.nightExposureBoostStops()} stops$sunriseSunset$cooldown$lowBattery$storageManagement"
     }
 
     private fun requestNeededPermissions() {

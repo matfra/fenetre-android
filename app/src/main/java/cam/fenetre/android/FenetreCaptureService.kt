@@ -593,7 +593,7 @@ class FenetreCaptureService : LifecycleService() {
         val vignetteCorrectionApplied = captureMode == ExposureMode.AUTO &&
             activeNightCaptureStrategy() == NightCaptureStrategy.MANUAL_ADAPTIVE &&
             vignetteCorrection.apply(photoFile)
-        val outputResizeApplied = outputResize.apply(photoFile)
+        val outputPostProcessApplied = outputResize.apply(photoFile)
         val ssimResult = updateSsim(photoFile)
         overlays.apply(photoFile)
         photoFile.copyTo(storage.latestFile(), overwrite = true)
@@ -611,7 +611,7 @@ class FenetreCaptureService : LifecycleService() {
             exposureComposite,
             imageBrightness,
             vignetteCorrectionApplied,
-            outputResizeApplied,
+            outputPostProcessApplied,
             ssimResult,
             captureExif,
         )

@@ -37,6 +37,12 @@ enum class NightCaptureStrategy(val label: String) {
     CAMERAX_NIGHT_EXTENSION("CameraX night extension"),
 }
 
+enum class OutputCropMode(val label: String) {
+    NONE("No crop"),
+    TOP_16_9("Top 16:9"),
+    CUSTOM_RECT("Custom rectangle"),
+}
+
 class FenetreCameraSettings(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = context.getSharedPreferences("fenetre_camera", Context.MODE_PRIVATE)
@@ -71,6 +77,29 @@ class FenetreCameraSettings(context: Context) {
         val cleaned = value.trim()
         preferences.edit()
             .putString(KEY_OUTPUT_RESIZE_SIZE, cleaned.takeIf { it.isEmpty() || IMAGE_SIZE_PATTERN.matches(it) }.orEmpty())
+            .apply()
+    }
+
+    fun outputCropMode(): OutputCropMode {
+        val name = preferences.getString(KEY_OUTPUT_CROP_MODE, OutputCropMode.NONE.name)
+        return OutputCropMode.entries.firstOrNull { it.name == name } ?: OutputCropMode.NONE
+    }
+
+    fun setOutputCropMode(mode: OutputCropMode) {
+        preferences.edit().putString(KEY_OUTPUT_CROP_MODE, mode.name).apply()
+    }
+
+    fun outputCropRect(): String {
+        return preferences.getString(KEY_OUTPUT_CROP_RECT, DEFAULT_OUTPUT_CROP_RECT)
+            ?.trim()
+            ?.takeIf { it.isEmpty() || CROP_RECT_PATTERN.matches(it) }
+            ?: DEFAULT_OUTPUT_CROP_RECT
+    }
+
+    fun setOutputCropRect(value: String) {
+        val cleaned = value.trim()
+        preferences.edit()
+            .putString(KEY_OUTPUT_CROP_RECT, cleaned.takeIf { it.isEmpty() || CROP_RECT_PATTERN.matches(it) }.orEmpty())
             .apply()
     }
 
@@ -791,6 +820,8 @@ class FenetreCameraSettings(context: Context) {
         private const val KEY_ROTATION_DEGREES = "rotation_degrees"
         private const val KEY_CAPTURE_JPEG_SIZE = "capture_jpeg_size"
         private const val KEY_OUTPUT_RESIZE_SIZE = "output_resize_size"
+        private const val KEY_OUTPUT_CROP_MODE = "output_crop_mode"
+        private const val KEY_OUTPUT_CROP_RECT = "output_crop_rect"
         private const val KEY_EXPOSURE_MODE = "exposure_mode"
         private const val KEY_CAMERA_NAME = "camera_name"
         private const val KEY_DEPLOYMENT_NAME = "deployment_name"
@@ -859,6 +890,7 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_ROTATION_DEGREES = 0
         private const val DEFAULT_CAPTURE_JPEG_SIZE = ""
         private const val DEFAULT_OUTPUT_RESIZE_SIZE = ""
+        private const val DEFAULT_OUTPUT_CROP_RECT = ""
         private const val DEFAULT_CAMERA_NAME_FALLBACK = "android-camera"
         private const val DEFAULT_DEPLOYMENT_NAME = "p6p.fenetre.cam"
         private const val DEFAULT_PUBLIC_BASE_URL = "https://p6p.fenetre.cam/"
@@ -921,5 +953,6 @@ class FenetreCameraSettings(context: Context) {
         private const val DEFAULT_OVERLAY_LATITUDE = 37.6
         private const val DEFAULT_OVERLAY_LONGITUDE = -122.4
         private val IMAGE_SIZE_PATTERN = Regex("""\d+x\d+""")
+        private val CROP_RECT_PATTERN = Regex("""\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+""")
     }
 }

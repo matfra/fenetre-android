@@ -282,6 +282,8 @@ class FenetreAdminServer(
                 "capture_jpeg_size": ${jsonString(settings.captureJpegSize())},
                 "selected_capture_jpeg_size": ${runtime.selectedCaptureJpegSize?.let { jsonString("${it.width}x${it.height}") } ?: "null"},
                 "output_resize_size": ${jsonString(settings.outputResizeSize())},
+                "output_crop_mode": ${jsonString(settings.outputCropMode().name.lowercase())},
+                "output_crop_rect": ${jsonString(settings.outputCropRect())},
                 "night_exposure_boost_stops": ${settings.nightExposureBoostStops()},
                 "night_exposure_boost_twilight_buffer_minutes": ${settings.nightExposureBoostTwilightBufferMinutes()},
                 "night_exposure_boost_active": $manualNightBoostActive,

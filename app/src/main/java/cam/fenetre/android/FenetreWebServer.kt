@@ -503,10 +503,13 @@ class FenetreWebServer(
             * { box-sizing: border-box; }
             html, body { margin: 0; min-height: 100%; }
             body { background: #07090d; }
+            body.home { overflow: hidden; }
             a { color: inherit; text-decoration: none; }
             .stage {
               position: relative;
-              min-height: 100vh;
+              height: 100vh;
+              height: 100dvh;
+              min-height: 0;
               overflow: hidden;
               background: #07090d;
             }
@@ -635,22 +638,30 @@ class FenetreWebServer(
             .entry small { color: rgba(255,255,255,.56); }
             @media (max-width: 720px) {
               .topbar {
-                padding: 16px;
+                gap: 10px;
+                padding: 10px;
                 flex-direction: column;
+              }
+              p {
+                margin-top: 3px;
+                font-size: 12px;
               }
               .topbar nav {
                 justify-content: flex-start;
+                gap: 6px;
               }
               .topbar a, .status span {
-                min-height: 34px;
-                padding: 0 12px;
+                min-height: 30px;
+                padding: 0 10px;
+                font-size: 12px;
               }
               .status {
-                left: 16px;
-                right: 16px;
-                bottom: 14px;
+                left: 10px;
+                right: 10px;
+                bottom: 8px;
+                gap: 6px;
               }
-              h1 { font-size: 24px; }
+              h1 { font-size: 21px; }
             }
         """.trimIndent()
     }

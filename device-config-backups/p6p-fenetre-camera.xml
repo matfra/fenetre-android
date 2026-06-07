@@ -8,7 +8,7 @@
     <boolean name="start_on_boot_enabled" value="true" />
     <int name="sunrise_offset_end_minutes" value="30" />
     <float name="vignette_correction_strength" value="0.2" />
-    <string name="lens_mode">TELE</string>
+    <string name="lens_mode">WIDE</string>
     <boolean name="timestamp_overlay_enabled" value="true" />
     <boolean name="storage_management_dry_run" value="false" />
     <int name="sunrise_sunset_fast_interval_seconds" value="10" />
@@ -28,5 +28,7 @@
     <string name="daily_timelapse_encoder_mode">VP9_HIGH_QUALITY</string>
     <boolean name="storage_management_enabled" value="true" />
     <string name="capture_jpeg_size"></string>
-    <string name="output_resize_size">2000x1500</string>
+    <string name="output_resize_size"></string>
+    <string name="output_crop_mode">CUSTOM_RECT</string>
+    <string name="output_crop_rect">1316,225,2856,2597</string>
 </map>

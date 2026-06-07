@@ -11,5 +11,6 @@
     <float name="manual_to_auto_max_exposure_seconds" value="0.033333" />
     <!-- Compatibility: old luma-based day-return key; current app uses shutter time. -->
     <float name="manual_to_auto_luma_margin" value="0.05" />
-    <string name="output_resize_size">1920x1440</string>
+    <string name="output_resize_size">1920x1080</string>
+    <string name="output_crop_mode">TOP_16_9</string>
 </map>
